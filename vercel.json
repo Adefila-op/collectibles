@@ -8,10 +8,7 @@
       "runtime": "nodejs18.x"
     }
   },
-  "env": [
-    {
-      "key": "VITE_API_URL",
-      "value": "/api"
-    }
-  ]
+  "env": {
+    "VITE_API_URL": "/api"
+  }
 }
