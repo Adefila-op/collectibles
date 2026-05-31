@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Holdings Data</title>
+</head>
+<body>
+    <h1>ArtChain Test Data Injector</h1>
+    <button id="addHoldings">Add Test Holdings for Adefila</button>
+    <button id="clearHoldings">Clear Holdings</button>
+    <button id="viewData">View Current Data</button>
+    <pre id="output"></pre>
+
+    <script>
+        const USER_ID = 'user_adefila';
+        const HOLDINGS_KEY = 'artchain_holdings';
+        const USERS_KEY = 'artchain_users';
+
+        function addTestHoldings() {
+            // Get current holdings
+            let holdings = JSON.parse(localStorage.getItem(HOLDINGS_KEY) || '[]');
+            
+            // Add holding for "harmattan" artwork
+            holdings.push({
+                id: 'holding_1',
+                userId: USER_ID,
+                artId: 'harmattan',
+                status: 'owned',
+                acquiredAt: new Date().toISOString()
+            });
+
+            // Add holding for "earth-rhythm" artwork
+            holdings.push({
+                id: 'holding_2',
+                userId: USER_ID,
+                artId: 'earth-rhythm',
+                status: 'owned',
+                acquiredAt: new Date().toISOString()
+            });
+
+            localStorage.setItem(HOLDINGS_KEY, JSON.stringify(holdings));
+            
+            // Update user wallet balance
+            let users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+            const user = users.find(u => u.id === USER_ID);
+            if (user) {
+                user.walletBalance = 1000000; // Add balance for next purchases
+            }
+            localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+            console.log('Holdings added:', holdings);
+            viewData();
+        }
+
+        function clearTestHoldings() {
+            let holdings = JSON.parse(localStorage.getItem(HOLDINGS_KEY) || '[]');
+            holdings = holdings.filter(h => h.userId !== USER_ID);
+            localStorage.setItem(HOLDINGS_KEY, JSON.stringify(holdings));
+            console.log('Holdings cleared');
+            viewData();
+        }
+
+        function viewData() {
+            const holdings = JSON.parse(localStorage.getItem(HOLDINGS_KEY) || '[]');
+            const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+            const output = document.getElementById('output');
+            
+            const userHoldings = holdings.filter(h => h.userId === USER_ID);
+            const user = users.find(u => u.id === USER_ID);
+
+            output.textContent = JSON.stringify({
+                user: user ? {id: user.id, walletBalance: user.walletBalance} : null,
+                userHoldings: userHoldings,
+                allHoldings: holdings.length,
+                allUsers: users.length
+            }, null, 2);
+        }
+
+        document.getElementById('addHoldings').onclick = addTestHoldings;
+        document.getElementById('clearHoldings').onclick = clearTestHoldings;
+        document.getElementById('viewData').onclick = viewData;
+
+        // Initial view
+        viewData();
+    </script>
+</body>
+</html>
