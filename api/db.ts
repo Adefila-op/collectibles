@@ -68,7 +68,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === "POST") {
-      if (!table || !table in db) {
+      if (!table || !(table in db)) {
         return res.status(400).json({ error: "Invalid table" });
       }
 
