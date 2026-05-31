@@ -1,7 +1,27 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import { getAllArtworks, fmt, ARTWORKS } from "@/lib/art-data";
-import { Search, SlidersHorizontal, Send, Repeat2, ShoppingCart } from "lucide-react";
+import { getAllArtworks, fmt, ARTWORKS, type Art } from "@/lib/art-data";
+import {
+  Activity,
+  ArrowRight,
+  BadgeCheck,
+  Bell,
+  Bookmark,
+  Heart,
+  Home as HomeIcon,
+  MessageCircle,
+  PackageCheck,
+  Plus,
+  Repeat2,
+  Search,
+  Send,
+  Settings,
+  ShieldCheck,
+  ShoppingCart,
+  SlidersHorizontal,
+  UserRound,
+  Wallet,
+} from "lucide-react";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
@@ -56,7 +76,28 @@ export default function Explore() {
   }, [searchQuery, selectedCategory, selectedCity, selectedStatus, priceRange, userOwnedArtIds]);
 
   return (
-    <AppFrame label="Explore · Filters">
+    <AppFrame
+      label="Explore · Filters"
+      desktop={
+        <DesktopMarketplace
+          artworks={filteredArtworks}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedCategory={selectedCategory}
+          onCategoryChange={setSelectedCategory}
+          selectedCity={selectedCity}
+          onCityChange={setSelectedCity}
+          selectedStatus={selectedStatus}
+          onStatusChange={setSelectedStatus}
+          priceRange={priceRange}
+          onPriceRangeChange={setPriceRange}
+          userOwnedArtIds={userOwnedArtIds}
+          userName={user?.name || "Kwame Mensah"}
+          walletBalance={user?.walletBalance || 1240500}
+          initials={user?.avatar || "KM"}
+        />
+      }
+    >
       <div className="space-y-4 px-5 pt-3 pb-6">
         <h2 className="font-display text-xl font-semibold">Explore</h2>
         <div className="flex gap-2">
@@ -192,7 +233,7 @@ export default function Explore() {
                         )}
                         <Link
                           to="/buy"
-                          className="flex items-center gap-1 rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs text-white font-semibold transition"
+                          className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs text-white font-semibold transition hover:bg-primary/90"
                         >
                           <ShoppingCart className="h-3.5 w-3.5" /> Buy
                         </Link>
@@ -251,5 +292,345 @@ export default function Explore() {
         )}
       </div>
     </AppFrame>
+  );
+}
+
+function DesktopMarketplace({
+  artworks,
+  searchQuery,
+  onSearchChange,
+  selectedCategory,
+  onCategoryChange,
+  selectedCity,
+  onCityChange,
+  selectedStatus,
+  onStatusChange,
+  priceRange,
+  onPriceRangeChange,
+  userOwnedArtIds,
+  userName,
+  walletBalance,
+  initials,
+}: {
+  artworks: Art[];
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
+  selectedCategory: string | null;
+  onCategoryChange: (value: string | null) => void;
+  selectedCity: string | null;
+  onCityChange: (value: string | null) => void;
+  selectedStatus: string | null;
+  onStatusChange: (value: string | null) => void;
+  priceRange: { min: number; max: number };
+  onPriceRangeChange: (value: { min: number; max: number }) => void;
+  userOwnedArtIds: Set<string>;
+  userName: string;
+  walletBalance: number;
+  initials: string;
+}) {
+  const categories = ["Painting", "Sculpture", "Textile", "Beadwork", "Photo"];
+  const cities = ["Lagos", "Dakar", "Accra", "Ibadan", "Senegal"];
+  const statuses = ["For sale", "Swap only", "Any"];
+  const featured = artworks[0] || ARTWORKS[0];
+  const totalValue = artworks.reduce((sum, art) => sum + art.price, 0);
+
+  return (
+    <div className="min-h-screen bg-[#f6f8ff] text-slate-950">
+      <div className="grid min-h-screen grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="sticky top-0 flex h-screen flex-col border-r border-slate-200/80 bg-white/90 px-6 py-8 backdrop-blur">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary-grad text-white shadow-soft">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <span className="font-display text-xl font-black">ArtChain</span>
+          </Link>
+          <nav className="mt-10 space-y-1 text-sm">
+            {[
+              { label: "Home", icon: HomeIcon, to: "/", active: false },
+              { label: "Explore", icon: Search, to: "/explore", active: true },
+              { label: "Collections", icon: PackageCheck, to: "/explore", active: false },
+              { label: "My Portfolio", icon: Wallet, to: "/profile", active: false },
+              { label: "Activity", icon: Activity, to: "/profile", active: false },
+              { label: "Artists", icon: UserRound, to: "/artist/emeka-osei", active: false },
+              { label: "Offers", icon: Send, to: "/offer", active: false },
+              { label: "Certificates", icon: BadgeCheck, to: "/profile", active: false },
+            ].map((item) => (
+              <Link
+                key={item.label}
+                to={item.to}
+                className={`flex items-center gap-3 rounded-2xl px-4 py-3 transition ${
+                  item.active
+                    ? "bg-primary/10 font-semibold text-primary"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                }`}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            {[
+              { label: "Watchlist", icon: Bookmark },
+              { label: "Messages", icon: MessageCircle },
+              { label: "Settings", icon: Settings },
+            ].map((item) => (
+              <Link
+                key={item.label}
+                to="/profile"
+                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            ))}
+          </div>
+          <div className="mt-auto space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                  {initials}
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">{userName}</div>
+                  <div className="text-xs text-slate-500">Collector</div>
+                </div>
+              </div>
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="text-xs text-slate-500">Wallet Balance</div>
+                <div className="mt-1 text-xl font-bold">{walletBalance.toLocaleString()} AC</div>
+                <div className="text-xs text-slate-500">~ ${(walletBalance / 100).toLocaleString()} USD</div>
+              </div>
+            </div>
+            <Link
+              to="/profile"
+              className="flex items-center justify-center rounded-2xl bg-primary-grad px-4 py-3 text-sm font-semibold text-white shadow-glow"
+            >
+              Top Up Wallet
+            </Link>
+          </div>
+        </aside>
+
+        <main className="px-8 py-8">
+          <header className="mx-auto flex max-w-[1500px] items-center gap-5">
+            <div className="flex h-14 flex-1 max-w-[620px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 shadow-sm">
+              <Search className="h-5 w-5 text-slate-500" />
+              <input
+                value={searchQuery}
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder="Search artworks, artists, collections..."
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+              />
+            </div>
+            <button className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm">
+              <Bell className="h-5 w-5" />
+            </button>
+            <Link
+              to="/list"
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary-grad px-6 py-3 text-sm font-semibold text-white shadow-glow"
+            >
+              List Your Art <Plus className="h-4 w-4" />
+            </Link>
+          </header>
+
+          <div className="mx-auto mt-8 grid max-w-[1500px] grid-cols-[minmax(0,1fr)_340px] gap-7">
+            <section className="space-y-6">
+              <div className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(120deg,#d9edff,#f1ddff_54%,#ffe1ed)] p-8 shadow-sm">
+                <div className="grid grid-cols-[1fr_320px] items-center gap-8">
+                  <div>
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-semibold text-primary">
+                      <ShieldCheck className="h-4 w-4" /> Marketplace with proof
+                    </div>
+                    <h1 className="mt-6 font-display text-5xl font-black leading-tight">
+                      Buy, offer, and swap physical art with onchain history.
+                    </h1>
+                    <p className="mt-4 max-w-2xl text-base leading-7 text-slate-700">
+                      Browse verified works with unique IDs, certificates, ownership records,
+                      exhibition history, restoration notes, and valuation signals.
+                    </p>
+                  </div>
+                  <img
+                    src={featured.image}
+                    alt={featured.name}
+                    className="h-72 w-full rounded-[24px] object-cover shadow-2xl"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-[28px] bg-white p-5 shadow-sm">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <h2 className="font-display text-xl font-semibold">Marketplace</h2>
+                    <div className="text-sm text-slate-500">
+                      {artworks.length} verified result{artworks.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <button className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold">
+                    <SlidersHorizontal className="h-4 w-4" /> Filters
+                  </button>
+                </div>
+
+                {artworks.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-5">
+                    {artworks.map((art) => {
+                      const isOwned = userOwnedArtIds.has(art.id);
+                      return (
+                        <article
+                          key={art.id}
+                          className="group overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-card"
+                        >
+                          <Link to={`/art/${art.id}`} className="relative block h-52 overflow-hidden">
+                            <img
+                              src={art.image}
+                              alt={art.name}
+                              className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
+                            />
+                            <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-emerald-700">
+                              <ShieldCheck className="h-3 w-3" /> verified
+                            </div>
+                          </Link>
+                          <div className="p-4">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <Link to={`/art/${art.id}`} className="block truncate text-sm font-semibold hover:text-primary">
+                                  {art.name}
+                                </Link>
+                                <div className="mt-1 truncate text-xs text-slate-500">
+                                  {art.artist} · {art.city}, {art.year}
+                                </div>
+                              </div>
+                              <button className="text-slate-400 hover:text-primary">
+                                <Heart className="h-5 w-5" />
+                              </button>
+                            </div>
+                            <div className="mt-3 font-semibold">{fmt(art.price)}</div>
+                            <div className="text-xs text-slate-500">#{art.token}</div>
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                              <Link
+                                to={isOwned ? "/swap" : `/offer?artId=${art.id}`}
+                                className="rounded-xl border border-slate-200 px-3 py-2 text-center text-xs font-semibold hover:border-primary hover:text-primary"
+                              >
+                                {isOwned ? "Swap" : "Offer"}
+                              </Link>
+                              <Link
+                                to={`/checkout/${art.id}`}
+                                className="rounded-xl bg-slate-950 px-3 py-2 text-center text-xs font-semibold text-white"
+                              >
+                                Buy
+                              </Link>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid min-h-[320px] place-items-center rounded-2xl bg-slate-50 text-center">
+                    <div>
+                      <Search className="mx-auto h-9 w-9 text-slate-400" />
+                      <div className="mt-3 text-sm font-semibold">No matching artwork</div>
+                      <div className="mt-1 text-sm text-slate-500">Try a different city, category, or price range.</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <aside className="space-y-5">
+              <div className="rounded-[28px] bg-white p-6 shadow-sm">
+                <h2 className="font-display text-lg font-semibold">Filter Artwork</h2>
+                <div className="mt-5 space-y-5">
+                  <FilterGroup title="Category" options={categories} value={selectedCategory} onChange={onCategoryChange} />
+                  <FilterGroup title="City" options={cities} value={selectedCity} onChange={onCityChange} />
+                  <FilterGroup
+                    title="Status"
+                    options={statuses}
+                    value={selectedStatus || "Any"}
+                    onChange={(value) => onStatusChange(value === "Any" ? null : value)}
+                  />
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-slate-500">Price range</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="number"
+                        value={priceRange.min}
+                        onChange={(event) =>
+                          onPriceRangeChange({ ...priceRange, min: parseInt(event.target.value) || 0 })
+                        }
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+                      />
+                      <input
+                        type="number"
+                        value={priceRange.max}
+                        onChange={(event) =>
+                          onPriceRangeChange({ ...priceRange, max: parseInt(event.target.value) || 2000000 })
+                        }
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display text-lg font-semibold">Market Snapshot</h2>
+                  <ArrowRight className="h-4 w-4 text-slate-400" />
+                </div>
+                <div className="mt-5 space-y-4">
+                  {[
+                    ["Visible value", fmt(totalValue), "+12.4%"],
+                    ["Verified works", artworks.length.toLocaleString(), "live"],
+                    ["Avg. listing", artworks.length ? fmt(Math.round(totalValue / artworks.length)) : fmt(0), "current"],
+                  ].map(([label, value, meta]) => (
+                    <div key={label} className="rounded-2xl bg-slate-50 p-4">
+                      <div className="text-xs text-slate-500">{label}</div>
+                      <div className="mt-1 text-xl font-bold">{value}</div>
+                      <div className="mt-1 text-xs font-semibold text-emerald-600">{meta}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </aside>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function FilterGroup({
+  title,
+  options,
+  value,
+  onChange,
+}: {
+  title: string;
+  options: string[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold text-slate-500">{title}</div>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = value === option;
+          return (
+            <button
+              key={option}
+              onClick={() => onChange(active ? null : option)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                active
+                  ? "border-primary bg-primary text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary"
+              }`}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

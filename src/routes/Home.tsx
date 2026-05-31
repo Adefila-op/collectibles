@@ -1,7 +1,19 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
+import heroCharacter from "@/assets/hero-character.png";
 import { getAllArtworks, fmt } from "@/lib/art-data";
-import { Search, Sparkles, Send, Repeat2, ShoppingCart } from "lucide-react";
+import {
+  Instagram,
+  Menu,
+  Repeat2,
+  Search,
+  Send,
+  ShieldCheck,
+  ShoppingCart,
+  Sparkles,
+  Twitter,
+  Wallet,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
 
@@ -9,13 +21,13 @@ export default function Home() {
   const { user } = useAuth();
   const greeting = user ? user.name.split(" ")[0] : "Collector";
   const initials = user ? user.avatar : "?";
-  
+
   const userHoldings = user ? getHoldings(user.id) : [];
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
   const allArtworks = getAllArtworks();
 
   return (
-    <AppFrame label="Home · Discover">
+    <AppFrame label="Home · Discover" desktop={<DesktopLanding />}>
       <div className="space-y-5 px-5 pt-3 pb-6">
         {/* greeting */}
         <div className="flex items-start justify-between animate-fade-up">
@@ -128,7 +140,7 @@ export default function Home() {
                     )}
                     <Link
                       to="/buy"
-                      className="flex items-center gap-1 rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs text-white font-semibold transition"
+                      className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs text-white font-semibold transition hover:bg-primary/90"
                     >
                       <ShoppingCart className="h-3.5 w-3.5" /> Buy
                     </Link>
@@ -147,5 +159,69 @@ export default function Home() {
         </div>
       </div>
     </AppFrame>
+  );
+}
+
+function DesktopLanding() {
+  return (
+    <div className="min-h-screen bg-[#0759e8] p-8 text-white">
+      <section className="relative mx-auto min-h-[calc(100vh-4rem)] max-w-7xl overflow-hidden rounded-[36px] bg-[#0b6fff] px-10 py-9 shadow-[0_30px_90px_rgba(0,24,95,0.35)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_16%,rgba(255,255,255,0.22),transparent_13%),radial-gradient(circle_at_76%_43%,rgba(74,201,255,0.22),transparent_28%),linear-gradient(135deg,#1585ff,#0759e8_64%,#0651d5)]" />
+        <div className="absolute bottom-20 right-28 h-24 w-64 rounded-full bg-[#03245f]/40 blur-2xl" />
+
+        <div className="relative z-10 flex items-center justify-between">
+          <Link to="/" className="font-display text-2xl font-black tracking-normal">
+            ARTCHAIN
+          </Link>
+          <div className="flex items-center gap-5 text-white/90">
+            <Instagram className="h-4 w-4" />
+            <Twitter className="h-4 w-4" />
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+          <div className="flex items-center gap-5">
+            <Link
+              to="/explore"
+              className="rounded-full border border-white/80 px-7 py-2.5 text-sm font-bold text-white transition hover:bg-white hover:text-primary"
+            >
+              Shop Art
+            </Link>
+            <Menu className="h-7 w-7" />
+          </div>
+        </div>
+
+        <div className="relative z-10 grid min-h-[calc(100vh-13rem)] grid-cols-[minmax(0,0.9fr)_minmax(420px,1fr)] items-center gap-10">
+          <div>
+            <div className="mb-9 grid h-16 w-16 place-items-center rounded-full bg-white/15 shadow-soft">
+              <ShieldCheck className="h-8 w-8 text-cyan-100" />
+            </div>
+            <h1 className="font-display text-[clamp(4.5rem,8vw,7.7rem)] font-black leading-[0.94] text-white">
+              Collect
+              <span className="block">Art</span>
+              <span className="block text-cyan-200">with</span>
+              <span className="block text-cyan-200">proof.</span>
+            </h1>
+            <Link
+              to="/profile"
+              className="mt-9 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-black text-primary shadow-soft transition hover:bg-cyan-100"
+            >
+              <Wallet className="h-4 w-4" /> Connect Wallet
+            </Link>
+            <div className="mt-20 text-center font-display text-2xl font-black leading-tight text-white">
+              <div>Say "5/10000"</div>
+              <div>Proofed</div>
+            </div>
+          </div>
+
+          <div className="relative flex min-h-[520px] items-center justify-center">
+            <div className="absolute bottom-16 h-12 w-72 rounded-full bg-[#03245f]/50 blur-xl" />
+            <img
+              src={heroCharacter}
+              alt="ArtChain character holding African artwork"
+              className="relative z-10 w-full max-w-[480px] animate-float drop-shadow-[0_34px_40px_rgba(0,25,96,0.38)]"
+            />
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

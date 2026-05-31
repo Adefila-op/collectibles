@@ -1,9 +1,60 @@
 import { Link, useParams } from "react-router-dom";
+import type { ReactNode } from "react";
 import { AppFrame } from "@/components/AppFrame";
 import { getArt, fmt } from "@/lib/art-data";
-import { ArrowLeft, ShieldCheck, Link2, Repeat2, Send, ShoppingCart, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Award,
+  BadgeCheck,
+  FileBadge,
+  History,
+  Landmark,
+  Link2,
+  Repeat2,
+  Send,
+  ShieldCheck,
+  ShoppingCart,
+  TrendingUp,
+  Wrench,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings, getArtworkOwner } from "@/lib/db";
+import { slugify } from "@/routes/ArtistProfile";
+
+function makeUniqueId(id: string) {
+  return `ART-${id.toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`;
+}
+
+function shortDate(value?: string) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+function HistorySection({
+  icon,
+  title,
+  empty,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  empty?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3 shadow-card">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <span className="grid h-7 w-7 place-items-center rounded-xl bg-primary/10 text-primary">
+          {icon}
+        </span>
+        {title}
+      </div>
+      {children || <div className="text-xs text-muted-foreground">{empty}</div>}
+    </div>
+  );
+}
 
 export default function ArtDetail() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +64,58 @@ export default function ArtDetail() {
   const userHoldings = user ? getHoldings(user.id) : [];
   const isOwned = userHoldings.some((h) => h.artId === a.id);
   const currentOwner = getArtworkOwner(a.id);
+  const uniqueId = a.uniqueId || makeUniqueId(a.id);
+  const certificate = a.certificate || {
+    id: `CERT-${uniqueId.replace(/^ART-/, "")}`,
+    issuer: "ArtChain Vault",
+    issuedAt: a.createdAt || `${a.year}`,
+    status: "verified" as const,
+  };
+  const ownershipHistory =
+    a.ownershipHistory && a.ownershipHistory.length > 0
+      ? a.ownershipHistory
+      : [
+          {
+            title: a.artist,
+            date: `${a.year}`,
+            detail: "Original artist record created for this artwork.",
+            reference: a.token,
+            value: a.price,
+          },
+          ...(currentOwner
+            ? [
+                {
+                  title: currentOwner.userName,
+                  date: "Current",
+                  detail: "Current collector of record on ArtChain.",
+                  reference: "Active holding",
+                },
+              ]
+            : []),
+        ];
+  const exhibitionHistory =
+    a.exhibitionHistory && a.exhibitionHistory.length > 0
+      ? a.exhibitionHistory
+      : [
+          {
+            title: `${a.city} Studio Showing`,
+            date: `${a.year}`,
+            detail: `Documented public presentation in ${a.city}.`,
+            reference: "Artist supplied record",
+          },
+        ];
+  const restorationHistory = a.restorationHistory || [];
+  const valuationHistory =
+    a.valuationHistory && a.valuationHistory.length > 0
+      ? a.valuationHistory
+      : [
+          {
+            date: "Current",
+            amount: a.price,
+            source: "Current ArtChain listing",
+            reference: a.token,
+          },
+        ];
 
   return (
     <AppFrame label="Artwork · Provenance">
@@ -41,10 +144,19 @@ export default function ArtDetail() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-3 text-sm shadow-card">
+          <div className="flex items-center justify-between border-b border-border/60 py-2">
+            <span className="text-xs text-muted-foreground">Artist</span>
+            <Link
+              to={`/artist/${slugify(a.artist)}`}
+              className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              {a.artist}
+            </Link>
+          </div>
           {(
             [
-              ["Artist", a.artist, "text-primary font-semibold"],
               ["Art Type", a.category, ""],
+              ["Unique ID", uniqueId, "font-mono text-xs"],
               ["Collection", a.collectionName || "—", ""],
               ["Supply", a.supplyName || "—", ""],
               ...(currentOwner ? [["Current Collector", currentOwner.userName, "text-primary font-semibold"]] : []),
@@ -66,7 +178,7 @@ export default function ArtDetail() {
         <div className="grid grid-cols-2 gap-2">
           <Link
             to={`/checkout/${a.id}`}
-            className="rounded-2xl bg-blue-600 hover:bg-blue-700 py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition"
+            className="rounded-2xl bg-primary py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition hover:bg-primary/90"
           >
             <ShoppingCart className="h-4 w-4" /> Buy
           </Link>
@@ -90,6 +202,117 @@ export default function ArtDetail() {
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700">
           <ShieldCheck className="mr-1 inline h-3.5 w-3.5" /> Art ships to vault for audit before
           funds release.
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm font-semibold">Artwork history report</div>
+            <div className="text-[11px] text-muted-foreground">
+              Identity, certification, ownership, exhibitions, restoration, and valuation.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-border bg-card p-3 shadow-card">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+                <BadgeCheck className="h-4 w-4 text-primary" /> Unique ID
+              </div>
+              <div className="font-mono text-[11px] font-semibold">{uniqueId}</div>
+              <div className="mt-1 text-[10px] text-muted-foreground">Permanent artwork record</div>
+            </div>
+            <div className="rounded-2xl border border-border bg-card p-3 shadow-card">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+                <FileBadge className="h-4 w-4 text-primary" /> Certificate
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold capitalize text-emerald-600">
+                <Award className="h-3.5 w-3.5" /> {certificate.status}
+              </div>
+              <div className="mt-1 font-mono text-[10px] text-muted-foreground">{certificate.id}</div>
+            </div>
+          </div>
+
+          <HistorySection icon={<History className="h-4 w-4" />} title="Ownership history">
+            <div className="space-y-2">
+              {ownershipHistory.map((event, index) => (
+                <div key={`${event.title}-${index}`} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className="h-2.5 w-2.5 rounded-full bg-primary" />
+                    {index < ownershipHistory.length - 1 && <div className="w-px flex-1 bg-border" />}
+                  </div>
+                  <div className="flex-1 pb-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-semibold">{event.title}</div>
+                      <div className="shrink-0 text-[10px] text-muted-foreground">{shortDate(event.date)}</div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{event.detail}</div>
+                    <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-muted-foreground/80">
+                      <span className="font-mono">{event.reference}</span>
+                      {event.value ? <span>{fmt(event.value)}</span> : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </HistorySection>
+
+          <HistorySection icon={<Landmark className="h-4 w-4" />} title="Exhibition history">
+            <div className="space-y-2">
+              {exhibitionHistory.map((event, index) => (
+                <div key={`${event.title}-${index}`} className="rounded-xl bg-muted/40 p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-xs font-semibold">{event.title}</div>
+                    <div className="shrink-0 text-[10px] text-muted-foreground">{shortDate(event.date)}</div>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">{event.detail}</div>
+                  {event.reference && (
+                    <div className="mt-1 font-mono text-[10px] text-muted-foreground/80">
+                      {event.reference}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </HistorySection>
+
+          <HistorySection
+            icon={<Wrench className="h-4 w-4" />}
+            title="Restoration history"
+            empty="No restoration events reported."
+          >
+            {restorationHistory.length > 0 ? (
+              <div className="space-y-2">
+                {restorationHistory.map((event, index) => (
+                  <div key={`${event.title}-${index}`} className="rounded-xl bg-muted/40 p-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs font-semibold">{event.title}</div>
+                      <div className="shrink-0 text-[10px] text-muted-foreground">{shortDate(event.date)}</div>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{event.detail}</div>
+                  </div>
+                ))}
+              </div>
+            ) : undefined}
+          </HistorySection>
+
+          <HistorySection icon={<TrendingUp className="h-4 w-4" />} title="Valuation history">
+            <div className="space-y-2">
+              {valuationHistory.map((event, index) => (
+                <div
+                  key={`${event.source}-${index}`}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 p-2"
+                >
+                  <div>
+                    <div className="text-xs font-semibold">{fmt(event.amount)}</div>
+                    <div className="text-[11px] text-muted-foreground">{event.source}</div>
+                    {event.reference && (
+                      <div className="font-mono text-[10px] text-muted-foreground/80">{event.reference}</div>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-[10px] text-muted-foreground">{shortDate(event.date)}</div>
+                </div>
+              ))}
+            </div>
+          </HistorySection>
         </div>
 
         {/* Provenance chain */}

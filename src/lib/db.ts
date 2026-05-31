@@ -9,6 +9,13 @@ export interface User {
   createdAt: string;
   avatar: string; // initials
   walletBalance: number;
+  artistStatus?: "collector" | "pending" | "approved";
+  artistType?: string;
+  artistBio?: string;
+  portfolioUrl?: string;
+  socialUrl?: string;
+  liveLocation?: string;
+  callUrl?: string;
 }
 
 export interface Session {
@@ -63,6 +70,32 @@ export interface Art {
   artistSignature?: string;
   createdAt?: string;
   isUserCreated?: boolean;
+  uniqueId?: string;
+  certificate?: {
+    id: string;
+    issuer: string;
+    issuedAt: string;
+    status: "verified" | "pending" | "missing";
+  };
+  ownershipHistory?: ArtworkHistoryEvent[];
+  exhibitionHistory?: ArtworkHistoryEvent[];
+  restorationHistory?: ArtworkHistoryEvent[];
+  valuationHistory?: ArtworkValuationEvent[];
+}
+
+export interface ArtworkHistoryEvent {
+  title: string;
+  date: string;
+  detail: string;
+  reference?: string;
+  value?: number;
+}
+
+export interface ArtworkValuationEvent {
+  date: string;
+  amount: number;
+  source: string;
+  reference?: string;
 }
 
 const USERS_KEY = "artchain_users";
@@ -126,6 +159,7 @@ export function createUser(
     createdAt: new Date().toISOString(),
     avatar: getInitials(name),
     walletBalance: 1_240_500,
+    artistStatus: "collector",
   };
   const users = getUsers();
   users.push(user);
@@ -144,6 +178,60 @@ export function verifyCredentials(
   if (user.passwordHash !== hashPassword(password)) {
     return { ok: false, error: "Incorrect password." };
   }
+  return { ok: true, user };
+}
+
+export function updateUserWalletBalance(
+  userId: string,
+  nextBalance: number
+): { ok: true; user: User } | { ok: false; error: string } {
+  const users = getUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) {
+    return { ok: false, error: "User not found." };
+  }
+
+  user.walletBalance = Math.max(0, Math.round(nextBalance));
+  saveUsers(users);
+  return { ok: true, user };
+}
+
+export function applyAsArtist(
+  userId: string,
+  data: {
+    artistType: string;
+    artistBio: string;
+    portfolioUrl: string;
+    socialUrl: string;
+    liveLocation: string;
+    callUrl: string;
+  }
+): { ok: true; user: User } | { ok: false; error: string } {
+  const users = getUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) return { ok: false, error: "User not found." };
+
+  user.artistStatus = "pending";
+  user.artistType = data.artistType.trim();
+  user.artistBio = data.artistBio.trim();
+  user.portfolioUrl = data.portfolioUrl.trim();
+  user.socialUrl = data.socialUrl.trim();
+  user.liveLocation = data.liveLocation.trim();
+  user.callUrl = data.callUrl.trim();
+  saveUsers(users);
+  return { ok: true, user };
+}
+
+export function updateArtistStatus(
+  userId: string,
+  status: "collector" | "pending" | "approved"
+): { ok: true; user: User } | { ok: false; error: string } {
+  const users = getUsers();
+  const user = users.find((u) => u.id === userId);
+  if (!user) return { ok: false, error: "User not found." };
+
+  user.artistStatus = status;
+  saveUsers(users);
   return { ok: true, user };
 }
 
@@ -452,7 +540,9 @@ export function addArtwork(
   category: string,
   price: number,
   imageData?: string,
-  userId?: string
+  userId?: string,
+  collectionName?: string,
+  supplyName?: string
 ): Art {
   const artwork: Art = {
     id: `custom_${crypto.randomUUID()}`,
@@ -463,9 +553,36 @@ export function addArtwork(
     category,
     price,
     image: imageData || "",
+    collectionName,
+    supplyName,
     token: `0x${Math.random().toString(16).slice(2, 8)}…${Math.random().toString(16).slice(2, 6)}`,
     createdAt: new Date().toISOString(),
     isUserCreated: true,
+    uniqueId: `ART-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+    certificate: {
+      id: `CERT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      issuer: "ArtChain Vault",
+      issuedAt: new Date().toISOString(),
+      status: "verified",
+    },
+    ownershipHistory: [
+      {
+        title: artist.trim(),
+        date: new Date().toISOString(),
+        detail: "Artist minted and listed the work on ArtChain.",
+        reference: "Primary listing",
+        value: price,
+      },
+    ],
+    exhibitionHistory: [],
+    restorationHistory: [],
+    valuationHistory: [
+      {
+        date: new Date().toISOString(),
+        amount: price,
+        source: "Initial artist listing",
+      },
+    ],
   };
   const artworks = getArtworks();
   artworks.push(artwork);

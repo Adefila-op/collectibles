@@ -1,90 +1,99 @@
 import type { ReactNode } from "react";
 import { PhoneShell } from "./PhoneShell";
 import { BottomNav } from "./BottomNav";
-import heroChar from "@/assets/hero-character.png";
-import { Sparkles, ShieldCheck, Link2 } from "lucide-react";
+import heroCharacter from "@/assets/hero-character.png";
+import { Instagram, Menu, ShieldCheck, Twitter, Wallet } from "lucide-react";
 
-export function AppFrame({ children, label }: { children: ReactNode; label?: string }) {
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-hero">
-      {/* ambient blobs */}
-      <div className="pointer-events-none absolute -left-32 top-20 h-96 w-96 rounded-full bg-primary/40 blur-3xl" />
-      <div className="pointer-events-none absolute -right-32 bottom-0 h-[28rem] w-[28rem] rounded-full bg-accent/40 blur-3xl" />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.07]"
-        style={{
-          backgroundImage: "radial-gradient(white 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
-        }}
-      />
-
-      <div className="relative mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 items-center gap-10 px-6 py-10 lg:grid-cols-[1.1fr_auto_1fr]">
-        {/* Left marketing column (desktop) */}
-        <aside className="hidden lg:block text-white animate-[fade-up_0.7s_cubic-bezier(.2,.8,.2,1)_both]">
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs backdrop-blur-md border border-white/15">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live on
-            Base · Onchain provenance
-          </div>
-          <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.05] tracking-tight">
-            Buy real African art. <br />
-            <span className="text-gradient">Proven onchain.</span>
-          </h1>
-          <p className="mt-4 max-w-md text-white/75">
-            ArtChain stops reproductions and fakes. Every piece carries a signed onchain certificate
-            from the original artist — buy, resell, or swap with proof.
-          </p>
-          <ul className="mt-7 space-y-3 text-sm">
-            {[
-              { icon: ShieldCheck, t: "Vault audit", d: "Physical inspection before funds release" },
-              { icon: Link2, t: "Provenance chain", d: "Every owner and price, on-chain forever" },
-              { icon: Sparkles, t: "Swap or sell", d: "Trade pieces or list to global collectors" },
-            ].map(({ icon: Icon, t, d }) => (
-              <li key={t} className="flex items-start gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 border border-white/15">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <div>
-                  <div className="font-medium">{t}</div>
-                  <div className="text-white/60">{d}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </aside>
-
-        {/* Phone */}
-        <div className="relative flex flex-col items-center">
+export function AppFrame({
+  children,
+  label,
+  desktop,
+}: {
+  children: ReactNode;
+  label?: string;
+  desktop?: ReactNode;
+}) {
+  if (desktop) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="lg:hidden">
           <PhoneShell label={label}>
-            <div className="flex h-full flex-col">
-              <div className="flex-1">{children}</div>
+            <div className="flex min-h-dvh flex-col">
+              <main className="flex-1">{children}</main>
               <BottomNav />
             </div>
           </PhoneShell>
         </div>
+        <div className="hidden min-h-screen lg:block">{desktop}</div>
+      </div>
+    );
+  }
 
-        {/* Right character column */}
-        <aside className="relative hidden lg:flex items-center justify-center">
-          <div className="absolute inset-0 -z-10">
-            <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/40 blur-3xl animate-glow" />
-            <div
-              className="absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15 animate-spin-slow"
-              style={{ borderStyle: "dashed" }}
-            />
+  return (
+    <div className="min-h-screen bg-background text-foreground lg:bg-[#0759e8]">
+      <div className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-center lg:gap-10 lg:px-8">
+        <aside className="relative hidden min-h-[640px] overflow-hidden rounded-[36px] bg-[#0b6fff] p-8 text-white shadow-[0_30px_90px_rgba(0,24,95,0.35)] lg:block">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(255,255,255,0.26),transparent_15%),radial-gradient(circle_at_78%_24%,rgba(110,193,255,0.35),transparent_20%),linear-gradient(135deg,#0f7cff,#064fd1)]" />
+          <div className="absolute -right-24 bottom-8 h-80 w-80 rounded-full bg-cyan-300/20 blur-3xl" />
+          <div className="absolute left-8 top-24 grid h-14 w-14 place-items-center rounded-full bg-white/15 shadow-soft">
+            <ShieldCheck className="h-7 w-7 text-cyan-100" />
           </div>
-          <img
-            src={heroChar}
-            alt="ArtChain mascot holding African artwork"
-            width={520}
-            height={520}
-            className="relative w-[420px] animate-float drop-shadow-[0_30px_60px_rgba(0,90,255,0.45)]"
-          />
-          <div className="absolute -left-2 top-10 glass-dark rounded-2xl px-3 py-2 text-xs text-white/90 animate-[fade-up_1s_.4s_both]">
-            ⛓ 0x4e3…a91f minted
+
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="font-display text-xl font-black">ARTCHAIN</div>
+            <div className="flex items-center gap-4 text-white/85">
+              <Instagram className="h-4 w-4" />
+              <Twitter className="h-4 w-4" />
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div className="flex items-center gap-4">
+              <a
+                href="/explore"
+                className="rounded-full border border-white/70 px-5 py-2 text-xs font-bold text-white transition hover:bg-white hover:text-primary"
+              >
+                Shop Art
+              </a>
+              <Menu className="h-6 w-6" />
+            </div>
           </div>
-          <div className="absolute -right-2 bottom-16 glass-dark rounded-2xl px-3 py-2 text-xs text-white/90 animate-[fade-up_1s_.7s_both]">
-            ✓ Vault audit passed
+
+          <div className="relative z-10 mt-28 grid grid-cols-[minmax(0,1fr)_320px] items-center gap-8">
+            <div>
+              <h1 className="font-display text-6xl font-black leading-[0.95] text-white">
+                Collect Art
+                <span className="block text-cyan-200">with proof.</span>
+              </h1>
+              <a
+                href="/profile"
+                className="mt-8 inline-flex items-center gap-2 rounded-full border-2 border-white bg-white px-5 py-2.5 text-xs font-black text-primary shadow-soft transition hover:bg-cyan-100"
+              >
+                <Wallet className="h-4 w-4" /> Connect Wallet
+              </a>
+
+              <div className="mt-16 text-center font-display text-lg font-black leading-tight text-white">
+                <div>Say "5/10000"</div>
+                <div>Proofed</div>
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="absolute -inset-6 rounded-full bg-cyan-200/25 blur-3xl" />
+              <img
+                src={heroCharacter}
+                alt="ArtChain character holding African artwork"
+                className="relative z-10 w-full animate-float drop-shadow-[0_34px_40px_rgba(0,25,96,0.38)]"
+              />
+              <div className="absolute bottom-5 left-1/2 h-6 w-44 -translate-x-1/2 rounded-full bg-[#03245f]/50 blur-md" />
+            </div>
           </div>
         </aside>
+
+        <PhoneShell label={label}>
+          <div className="flex min-h-dvh flex-col lg:min-h-[812px]">
+            <main className="flex-1">{children}</main>
+            <BottomNav />
+          </div>
+        </PhoneShell>
       </div>
     </div>
   );

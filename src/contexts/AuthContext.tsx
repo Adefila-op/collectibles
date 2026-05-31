@@ -12,6 +12,8 @@ import {
   clearSession,
   createUser,
   verifyCredentials,
+  updateUserWalletBalance,
+  applyAsArtist,
   type User,
 } from "@/lib/db";
 
@@ -28,6 +30,15 @@ interface AuthContextValue {
     password: string
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => void;
+  updateWalletBalance: (nextBalance: number) => { ok: true } | { ok: false; error: string };
+  submitArtistApplication: (data: {
+    artistType: string;
+    artistBio: string;
+    portfolioUrl: string;
+    socialUrl: string;
+    liveLocation: string;
+    callUrl: string;
+  }) => { ok: true } | { ok: false; error: string };
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,8 +87,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateWalletBalance = useCallback(
+    (nextBalance: number): { ok: true } | { ok: false; error: string } => {
+      if (!user) return { ok: false, error: "Sign in to use your wallet." };
+      const result = updateUserWalletBalance(user.id, nextBalance);
+      if (!result.ok) return result;
+      setUser(result.user);
+      return { ok: true };
+    },
+    [user]
+  );
+
+  const submitArtistApplication = useCallback(
+    (data: {
+      artistType: string;
+      artistBio: string;
+      portfolioUrl: string;
+      socialUrl: string;
+      liveLocation: string;
+      callUrl: string;
+    }): { ok: true } | { ok: false; error: string } => {
+      if (!user) return { ok: false, error: "Sign in to apply as an artist." };
+      const result = applyAsArtist(user.id, data);
+      if (!result.ok) return result;
+      setUser(result.user);
+      return { ok: true };
+    },
+    [user]
+  );
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut, updateWalletBalance, submitArtistApplication }}>
       {children}
     </AuthContext.Provider>
   );

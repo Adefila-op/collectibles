@@ -38,8 +38,6 @@ async function writeDB(db: DBSchema): Promise<void> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { action, table, data, filter } = req.body;
-
   try {
     if (req.method === "GET") {
       const { table: getTable, filter: getFilter } = req.query;
@@ -62,6 +60,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === "POST") {
+      const { action, table, data, filter } = req.body || {};
+      const db = await readDB();
+
       if (!table || !(table in db)) {
         return res.status(400).json({ error: "Invalid table" });
       }

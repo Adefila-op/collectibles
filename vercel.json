@@ -5,9 +5,15 @@
   "framework": "vite",
   "functions": {
     "api/**/*.ts": {
-      "runtime": "@vercel/node@3.0.0"
+      "runtime": "@vercel/node@5.8.8"
     }
   },
+  "rewrites": [
+    {
+      "source": "/((?!api/.*).*)",
+      "destination": "/index.html"
+    }
+  ],
   "env": {
     "VITE_API_URL": "/api"
   }

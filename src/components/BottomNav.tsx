@@ -1,9 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 import { Home, Search, Plus, Repeat2, User } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function BottomNav() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
   const is = (p: string) => pathname === p;
+  const canListArtwork = user?.artistStatus === "approved";
 
   const Item = ({
     to,
@@ -26,16 +29,20 @@ export function BottomNav() {
   );
 
   return (
-    <div className="sticky bottom-0 z-10 mt-auto border-t border-border bg-card/85 px-5 py-2.5 backdrop-blur-xl">
+    <div className="sticky bottom-0 z-10 mt-auto border-t border-border/70 bg-card/90 px-5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl">
       <div className="flex items-center justify-between">
         <Item to="/" icon={Home} label="Home" />
         <Item to="/explore" icon={Search} label="Explore" />
-        <Link
-          to="/list"
-          className="-mt-7 grid h-12 w-12 place-items-center rounded-full bg-primary-grad text-white shadow-glow animate-pulse-ring"
-        >
-          <Plus className="h-5 w-5" />
-        </Link>
+        {canListArtwork ? (
+          <Link
+            to="/list"
+            className="-mt-7 grid h-12 w-12 place-items-center rounded-full bg-primary-grad text-white shadow-glow animate-pulse-ring"
+          >
+            <Plus className="h-5 w-5" />
+          </Link>
+        ) : (
+          <div className="h-12 w-12" aria-hidden="true" />
+        )}
         <Item to="/swap" icon={Repeat2} label="Swap" />
         <Item to="/profile" icon={User} label="Profile" />
       </div>
