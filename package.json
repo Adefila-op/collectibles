@@ -11,7 +11,7 @@
     "format": "prettier --write ."
   },
   "engines": {
-    "node": "18.x"
+    "node": "18"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
