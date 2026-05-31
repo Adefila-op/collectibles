@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import { getAllArtworks, fmt } from "@/lib/art-data";
+import { getAllArtworks, fmt, ARTWORKS } from "@/lib/art-data";
 import { Search, SlidersHorizontal, Send, Repeat2, ShoppingCart } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,9 +47,9 @@ export default function Explore() {
 
     // Status filter
     if (selectedStatus === "For sale") {
-      results = results.filter((a) => !userOwnedArtIds.has(a.id) || !a.swap);
+      results = results.filter((a) => !userOwnedArtIds.has(a.id));
     } else if (selectedStatus === "Swap only") {
-      results = results.filter((a) => a.swap);
+      results = results.filter((a) => userOwnedArtIds.has(a.id));
     }
 
     return results;
@@ -94,7 +94,7 @@ export default function Explore() {
                 t: "Status", 
                 opts: ["For sale", "Swap only", "Any"], 
                 selected: selectedStatus,
-                onChange: (val) => setSelectedStatus(val === "Any" ? null : val)
+                onChange: (val: string | null) => setSelectedStatus(val === "Any" ? null : val)
               },
             ].map((g) => (
               <div key={g.t}>
