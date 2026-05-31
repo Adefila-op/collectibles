@@ -1,8 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import * as fs from "fs";
-import * as path from "path";
-
-const DB_PATH = "/tmp/artchain_db.json";
+import { kv } from "@vercel/kv";
 
 interface DBSchema {
   users: any[];
@@ -22,34 +19,31 @@ const defaultDB: DBSchema = {
   artworks: [],
 };
 
-function readDB(): DBSchema {
+async function readDB(): Promise<DBSchema> {
   try {
-    if (fs.existsSync(DB_PATH)) {
-      const data = fs.readFileSync(DB_PATH, "utf-8");
-      return JSON.parse(data);
-    }
+    const data = await kv.get("artchain_db");
+    return (data as DBSchema) || defaultDB;
   } catch (error) {
-    console.error("Error reading DB:", error);
-  }
-  return defaultDB;
-}
-
-function writeDB(db: DBSchema): void {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-  } catch (error) {
-    console.error("Error writing DB:", error);
+    console.error("Error reading DB from KV:", error);
+    return defaultDB;
   }
 }
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  const db = readDB();
+async function writeDB(db: DBSchema): Promise<void> {
+  try {
+    await kv.set("artchain_db", db);
+  } catch (error) {
+    console.error("Error writing DB to KV:", error);
+  }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { action, table, data, filter } = req.body;
 
   try {
     if (req.method === "GET") {
       const { table: getTable, filter: getFilter } = req.query;
-      const db = readDB();
+      const db = await readDB();
       
       if (getTable && typeof getTable === "string") {
         let result = db[getTable as keyof DBSchema] || [];
@@ -77,7 +71,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       if (action === "create") {
         const newItem = { id: crypto.randomUUID(), ...data };
         t.push(newItem);
-        writeDB(db);
+        await writeDB(db);
         return res.status(201).json(newItem);
       }
 
@@ -95,7 +89,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         const index = t.findIndex((item: any) => item.id === data.id);
         if (index >= 0) {
           t[index] = { ...t[index], ...data };
-          writeDB(db);
+          await writeDB(db);
           return res.status(200).json(t[index]);
         }
         return res.status(404).json({ error: "Not found" });
@@ -105,7 +99,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         const index = t.findIndex((item: any) => item.id === data.id);
         if (index >= 0) {
           const deleted = t.splice(index, 1)[0];
-          writeDB(db);
+          await writeDB(db);
           return res.status(200).json(deleted);
         }
         return res.status(404).json({ error: "Not found" });
