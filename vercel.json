@@ -3,7 +3,6 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "vite",
-  "nodeVersion": "18.x",
   "functions": {
     "api/**/*.ts": {
       "runtime": "nodejs18.x"
