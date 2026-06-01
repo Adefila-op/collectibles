@@ -452,6 +452,8 @@ function DesktopMarketplace({
                   <img
                     src={featured.image}
                     alt={featured.name}
+                    loading="eager"
+                    decoding="async"
                     className="h-72 w-full rounded-[24px] object-cover shadow-2xl"
                   />
                 </div>
@@ -483,6 +485,8 @@ function DesktopMarketplace({
                             <img
                               src={art.image}
                               alt={art.name}
+                              loading="eager"
+                              decoding="async"
                               className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
                             />
                             <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-emerald-700">

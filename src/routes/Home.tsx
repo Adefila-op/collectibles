@@ -217,6 +217,8 @@ function DesktopLanding() {
             <img
               src={heroCharacter}
               alt="ArtChain character holding African artwork"
+              loading="eager"
+              decoding="async"
               className="relative z-10 w-full max-w-[480px] animate-float drop-shadow-[0_34px_40px_rgba(0,25,96,0.38)]"
             />
           </div>

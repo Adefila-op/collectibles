@@ -90,6 +90,8 @@ export function AppFrame({
               <img
                 src={heroCharacter}
                 alt="ArtChain character holding African artwork"
+                loading="eager"
+                decoding="async"
                 className="relative z-10 mx-auto w-64 animate-float drop-shadow-[0_34px_40px_rgba(0,25,96,0.38)]"
               />
               <div className="absolute bottom-5 left-1/2 h-6 w-44 -translate-x-1/2 rounded-full bg-[#03245f]/50 blur-md" />
