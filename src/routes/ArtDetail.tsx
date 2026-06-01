@@ -1,20 +1,28 @@
 import { Link, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/AppFrame";
-import { getArt, fmt } from "@/lib/art-data";
+import { getAllArtworks, getArt, fmt, type Art } from "@/lib/art-data";
+import { OFFERS } from "@/lib/offers-data";
 import {
   ArrowLeft,
+  Activity,
   Award,
   BadgeCheck,
+  Clock,
   FileBadge,
   History,
+  Home as HomeIcon,
   Landmark,
   Link2,
+  PackageCheck,
   Repeat2,
+  Search,
   Send,
   ShieldCheck,
   ShoppingCart,
   TrendingUp,
+  UserRound,
+  Wallet,
   Wrench,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -56,6 +64,265 @@ function HistorySection({
   );
 }
 
+function DesktopSidebar() {
+  return (
+    <aside className="sticky top-0 flex h-screen flex-col border-r border-slate-200/80 bg-white/90 px-6 py-8 backdrop-blur">
+      <Link to="/" className="flex items-center gap-3">
+        <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary-grad text-white shadow-soft">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <span className="font-display text-xl font-black">ArtChain</span>
+      </Link>
+      <nav className="mt-10 space-y-1 text-sm">
+        {[
+          { label: "Home", icon: HomeIcon, to: "/" },
+          { label: "Explore", icon: Search, to: "/explore" },
+          { label: "Collections", icon: PackageCheck, to: "/explore" },
+          { label: "My Portfolio", icon: Wallet, to: "/explore" },
+          { label: "Activity", icon: Activity, to: "/explore" },
+          { label: "Artists", icon: UserRound, to: "/explore" },
+          { label: "Offers", icon: Send, to: "/offer" },
+          { label: "Certificates", icon: BadgeCheck, to: "/explore" },
+        ].map((item) => (
+          <Link
+            key={item.label}
+            to={item.to}
+            className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+          >
+            <item.icon className="h-4 w-4" />
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+function DesktopArtworkDetail({
+  art,
+  isOwned,
+  currentOwnerName,
+  uniqueId,
+  suggestedCollection,
+  collectionOffers,
+}: {
+  art: Art;
+  isOwned: boolean;
+  currentOwnerName?: string;
+  uniqueId: string;
+  suggestedCollection: Art[];
+  collectionOffers: typeof OFFERS;
+}) {
+  const artistWorks = getAllArtworks().filter((item) => item.artist === art.artist);
+  const artistValue = artistWorks.reduce((sum, item) => sum + item.price, 0);
+
+  return (
+    <div className="grid min-h-screen grid-cols-[260px_minmax(0,1fr)] bg-[#f6f8ff] text-slate-950">
+      <DesktopSidebar />
+      <div className="px-8 py-7">
+      <div className="mx-auto grid max-w-[1500px] grid-cols-[minmax(0,1fr)_360px] gap-7">
+        <main className="space-y-6">
+          <header className="flex items-center justify-between gap-5">
+            <div className="flex items-center gap-3">
+              <Link to="/explore" className="grid h-10 w-10 place-items-center rounded-full bg-white text-slate-700 shadow-sm">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Artwork detail</div>
+                <h1 className="font-display text-3xl font-black">{art.name}</h1>
+              </div>
+            </div>
+            <div className="flex h-12 w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 shadow-sm">
+              <Link2 className="h-4 w-4 text-slate-400" />
+              <span className="truncate text-sm text-slate-500">{uniqueId}</span>
+            </div>
+          </header>
+
+          <section className="grid grid-cols-[minmax(320px,0.9fr)_minmax(0,1fr)] items-start gap-6">
+            <div className="overflow-hidden rounded-[28px] bg-white p-4 shadow-sm">
+              <div className="relative">
+                <img src={art.image} alt={art.name} className="h-[430px] w-full rounded-[22px] object-cover" />
+                <div className="absolute inset-x-4 bottom-4 rounded-2xl bg-white/82 px-5 py-4 text-center shadow-sm backdrop-blur">
+                  <div className="flex items-center justify-center gap-2 font-display text-xl font-black">
+                    <Clock className="h-5 w-5 text-primary" /> Verified collection item
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">Vault audit before funds release</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] bg-white p-6 shadow-sm">
+              <div className="flex items-start justify-between gap-5">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    <ShieldCheck className="h-3.5 w-3.5" /> verified
+                  </div>
+                  <h2 className="mt-5 font-display text-4xl font-black leading-tight">{art.name}</h2>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
+                    A documented {art.category.toLowerCase()} from {art.city}, connected to artist records,
+                    ownership history, and market offers in ArtChain.
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-950 px-4 py-3 text-right text-white">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-white/50">Current price</div>
+                  <div className="mt-1 text-xl font-bold">{fmt(art.price)}</div>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+                {[
+                  ["Artist", art.artist],
+                  ["Category", art.category],
+                  ["City", art.city],
+                  ["Year", art.year.toString()],
+                  ["Current owner", currentOwnerName || "Open market"],
+                  ["Token", art.token],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl bg-slate-50 p-4">
+                    <div className="text-xs text-slate-500">{label}</div>
+                    <div className="mt-1 truncate font-semibold">{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-slate-200 p-4">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <div className="text-xs text-slate-500">Main action</div>
+                    <div className="mt-1 text-lg font-bold">{isOwned ? "Swap this owned artwork" : "Buy or make an offer"}</div>
+                  </div>
+                  {isOwned ? (
+                    <Link
+                      to="/swap"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                    >
+                      <Repeat2 className="h-4 w-4" /> Swap
+                    </Link>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <Link
+                        to={`/checkout/${art.id}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-sm"
+                      >
+                        <ShoppingCart className="h-4 w-4" /> Buy
+                      </Link>
+                      <Link
+                        to={`/offer?artId=${art.id}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-glow"
+                      >
+                        <Send className="h-4 w-4" /> Offer
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[28px] bg-white p-5 shadow-sm">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-xl font-semibold">Suggested Collection</h2>
+                <div className="text-sm text-slate-500">Related works from the same market lane</div>
+              </div>
+              <Link to="/explore" className="text-sm font-semibold text-primary">View all</Link>
+            </div>
+            <div className="grid grid-cols-3 gap-5">
+              {suggestedCollection.map((item) => (
+                <Link key={item.id} to={`/art/${item.id}`} className="group overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                  <div className="relative h-56 overflow-hidden">
+                    <img src={item.image} alt={item.name} className="h-full w-full object-cover transition duration-700 group-hover:scale-110" />
+                    <div className="absolute left-3 top-3 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-primary">
+                      Place offer
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="truncate text-sm font-semibold">{item.name}</div>
+                    <div className="mt-1 text-xs text-slate-500">{item.artist}</div>
+                    <div className="mt-4 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">{item.category}</span>
+                      <span className="font-semibold">{fmt(item.price)}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        </main>
+
+        <aside className="space-y-6">
+          <section className="overflow-hidden rounded-[28px] bg-white shadow-sm">
+            <div className="h-36 bg-[linear-gradient(135deg,#19c6ff,#2f5bff_58%,#8b5cf6)]" />
+            <div className="px-6 pb-6">
+              <div className="-mt-10 grid h-20 w-20 place-items-center rounded-full border-4 border-white bg-slate-950 text-xl font-black text-white shadow-sm">
+                {art.artist.split(" ").map((part) => part[0]).join("").slice(0, 2)}
+              </div>
+              <div className="mt-3 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-xl font-semibold">{art.artist}</h2>
+                  <div className="text-xs text-slate-500">Artist</div>
+                </div>
+                <Link to={`/artist/${slugify(art.artist)}`} className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white">
+                  Profile
+                </Link>
+              </div>
+              <div className="mt-5">
+                <h3 className="text-sm font-semibold">Artist biography</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {art.artist} creates collectible {art.category.toLowerCase()} works shaped by {art.city}'s
+                  visual culture, studio practice, and documented provenance. This artist has {artistWorks.length}{" "}
+                  verified work{artistWorks.length === 1 ? "" : "s"} on ArtChain.
+                </p>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="text-[10px] text-slate-500">Works</div>
+                  <div className="mt-1 text-lg font-bold">{artistWorks.length}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="text-[10px] text-slate-500">Market</div>
+                  <div className="mt-1 text-lg font-bold">{fmt(artistValue)}</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[28px] bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-lg font-semibold">Offers on the collection</h2>
+                <div className="text-xs text-slate-500">{art.category} collector demand</div>
+              </div>
+              <TrendingUp className="h-4 w-4 text-slate-400" />
+            </div>
+            <div className="space-y-3">
+              {collectionOffers.map((offer, index) => (
+                <div key={offer.id} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+                  <div className="w-4 text-xs font-semibold text-slate-400">{index + 1}</div>
+                  <div className="grid h-10 w-10 place-items-center rounded-full bg-white text-xs font-bold text-primary shadow-sm">
+                    {offer.buyerInitials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{offer.buyer}</div>
+                    <div className="text-xs text-slate-500">{offer.buyerCity} - {offer.placedAgo}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold">{fmt(offer.cash)}</div>
+                    <Link to={`/offer?artId=${art.id}`} className="text-xs font-semibold text-primary">
+                      Accept
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ArtDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -64,6 +331,12 @@ export default function ArtDetail() {
   const userHoldings = user ? getHoldings(user.id) : [];
   const isOwned = userHoldings.some((h) => h.artId === a.id);
   const currentOwner = getArtworkOwner(a.id);
+  const allArtworks = getAllArtworks();
+  const suggestedCollection = allArtworks
+    .filter((art) => art.id !== a.id)
+    .filter((art) => art.category === a.category || art.artist === a.artist)
+    .slice(0, 3);
+  const collectionOffers = OFFERS.filter((offer) => offer.category === a.category).slice(0, 4);
   const uniqueId = a.uniqueId || makeUniqueId(a.id);
   const certificate = a.certificate || {
     id: `CERT-${uniqueId.replace(/^ART-/, "")}`,
@@ -118,7 +391,23 @@ export default function ArtDetail() {
         ];
 
   return (
-    <AppFrame label="Artwork · Provenance">
+    <AppFrame
+      label="Artwork · Provenance"
+      desktop={
+        <DesktopArtworkDetail
+          art={a}
+          isOwned={isOwned}
+          currentOwnerName={currentOwner?.userName}
+          uniqueId={uniqueId}
+          suggestedCollection={
+            suggestedCollection.length
+              ? suggestedCollection
+              : allArtworks.filter((art) => art.id !== a.id).slice(0, 3)
+          }
+          collectionOffers={collectionOffers.length ? collectionOffers : OFFERS.slice(0, 4)}
+        />
+      }
+    >
       <div className="space-y-4 px-5 pt-3 pb-6">
         <div className="flex items-center gap-3">
           <Link
