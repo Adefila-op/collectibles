@@ -5,7 +5,6 @@ import { getAllArtworks, getArt, fmt, type Art } from "@/lib/art-data";
 import { OFFERS } from "@/lib/offers-data";
 import {
   ArrowLeft,
-  Activity,
   Award,
   BadgeCheck,
   Clock,
@@ -14,7 +13,6 @@ import {
   Home as HomeIcon,
   Landmark,
   Link2,
-  PackageCheck,
   Repeat2,
   Search,
   Send,
@@ -77,12 +75,8 @@ function DesktopSidebar() {
         {[
           { label: "Home", icon: HomeIcon, to: "/" },
           { label: "Explore", icon: Search, to: "/explore" },
-          { label: "Collections", icon: PackageCheck, to: "/explore" },
-          { label: "My Portfolio", icon: Wallet, to: "/explore" },
-          { label: "Activity", icon: Activity, to: "/explore" },
-          { label: "Artists", icon: UserRound, to: "/explore" },
-          { label: "Offers", icon: Send, to: "/offer" },
-          { label: "Certificates", icon: BadgeCheck, to: "/explore" },
+          { label: "My Portfolio", icon: Wallet, to: "/explore?section=portfolio" },
+          { label: "Artists", icon: UserRound, to: "/explore?section=artists" },
         ].map((item) => (
           <Link
             key={item.label}

@@ -9,31 +9,32 @@ import { purchaseArt } from "@/lib/db";
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateWalletBalance } = useAuth();
   const a = getArt(id!);
   const fee = Math.round(a.price * 0.02);
   const [method, setMethod] = useState("Bank");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [message, setMessage] = useState("");
 
   const handleCheckout = async () => {
     if (!user) {
-      alert("Please sign in to purchase");
       navigate("/profile");
       return;
     }
 
+    setMessage("");
     setIsProcessing(true);
     try {
       const result = purchaseArt(user.id, a.id, a.price + fee);
-      if (result?.success) {
-        alert("Purchase successful! Artwork added to your collection.");
+      if (result.success) {
+        updateWalletBalance(user.walletBalance - (a.price + fee));
+        setMessage("Purchase successful. Artwork added to your collection.");
         navigate("/profile");
       } else {
-        alert("Purchase failed. Please try again.");
+        setMessage(result.error);
       }
     } catch (error) {
-      console.error("Checkout error:", error);
-      alert("Error processing payment. Please try again.");
+      setMessage("Error processing payment. Please try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -98,6 +99,12 @@ export default function Checkout() {
           <Lock className="mr-1 inline h-3.5 w-3.5" /> Funds held in escrow until vault audit
           completes.
         </div>
+
+        {message && (
+          <div className="rounded-2xl bg-primary/10 p-3 text-xs font-semibold text-primary">
+            {message}
+          </div>
+        )}
 
         <button
           onClick={handleCheckout}

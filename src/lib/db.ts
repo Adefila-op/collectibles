@@ -443,17 +443,28 @@ export function purchaseArt(
   artId: string,
   price: number,
   sellerId?: string
-): { holding: UserHolding; success: boolean } | null {
+): { holding: UserHolding; success: true } | { success: false; error: string } {
+  const users = getUsers();
+  const buyer = users.find((u) => u.id === buyerId);
+  if (!buyer) return { success: false, error: "Buyer not found." };
+  if (buyer.walletBalance < price) return { success: false, error: "Insufficient wallet balance." };
+
+  const existingBuyerHolding = getHoldings(buyerId).find(
+    (h) => h.artId === artId && (h.status === "owned" || h.status === "listed")
+  );
+  if (existingBuyerHolding) return { success: false, error: "Artwork is already in your collection." };
+
+  if (sellerId) {
+    const sellerHolding = getHoldings(sellerId).find((h) => h.artId === artId && h.status === "listed");
+    if (!sellerHolding) return { success: false, error: "Artwork is no longer listed by this seller." };
+  }
+
   // Add art to buyer's holdings
   const holding = addHolding(buyerId, artId, "owned");
 
   // Update buyer's wallet
-  const users = getUsers();
-  const buyer = users.find((u) => u.id === buyerId);
-  if (buyer) {
-    buyer.walletBalance = Math.max(0, buyer.walletBalance - price);
-    saveUsers(users);
-  }
+  buyer.walletBalance = Math.max(0, buyer.walletBalance - price);
+  saveUsers(users);
 
   // Update seller's wallet if applicable
   if (sellerId) {
@@ -487,7 +498,7 @@ export function acceptOffer(
 
   // Execute purchase
   const result = purchaseArt(offer.buyerId, artId, offer.amount, sellerId);
-  return result ? { success: true } : { success: false, error: "Purchase failed" };
+  return result.success ? { success: true } : { success: false, error: result.error };
 }
 
 export function initiateResale(

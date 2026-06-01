@@ -1,6 +1,8 @@
 import { AppFrame } from "@/components/AppFrame";
 import { OFFERS, type Offer } from "@/lib/offers-data";
-import { ARTWORKS, fmt, type Art } from "@/lib/art-data";
+import { ARTWORKS, getAllArtworks, fmt, type Art } from "@/lib/art-data";
+import { useAuth } from "@/contexts/AuthContext";
+import { getHoldings, proposeSwap, updateHoldingStatus } from "@/lib/db";
 import {
   ArrowDownUp,
   ShieldCheck,
@@ -15,9 +17,31 @@ import { useMemo, useState } from "react";
 type Stage = 0 | 1 | 2 | 3 | 4;
 
 export default function SwapPage() {
-  const [myArt] = useState<Art>(ARTWORKS[0]);
+  const { user, updateWalletBalance } = useAuth();
+  const allArtworks = getAllArtworks();
+  const ownedHolding = user ? getHoldings(user.id).find((holding) => holding.status === "owned") : null;
+  const [myArt] = useState<Art>(
+    ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0]
+  );
   const [selected, setSelected] = useState<Offer | null>(null);
   const [stage, setStage] = useState<Stage>(0);
+  const [message, setMessage] = useState("");
+
+  function acceptStandingOffer(offer: Offer) {
+    if (!user || !ownedHolding) {
+      setMessage("Sign in with an owned artwork before accepting a swap offer.");
+      return;
+    }
+
+    proposeSwap(user.id, `standing-${offer.id}`, myArt.id, offer.offeredArt?.id || offer.id);
+    setSelected(offer);
+  }
+
+  function releaseSwapFunds(offer: Offer) {
+    if (!user || !ownedHolding) return;
+    updateHoldingStatus(ownedHolding.id, "swapped");
+    updateWalletBalance(user.walletBalance + offer.cash);
+  }
 
   const matching = useMemo(
     () =>
@@ -38,6 +62,7 @@ export default function SwapPage() {
             setSelected(null);
             setStage(0);
           }}
+          onComplete={releaseSwapFunds}
         />
       </AppFrame>
     );
@@ -105,7 +130,7 @@ export default function SwapPage() {
                   {top.buyer} · {top.buyerCity} · {top.placedAgo}
                 </div>
                 <button
-                  onClick={() => setSelected(top)}
+                  onClick={() => acceptStandingOffer(top)}
                   className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110"
                 >
                   Swap for {fmt(top.cash)} →
@@ -122,7 +147,7 @@ export default function SwapPage() {
               {matching.slice(1).map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => setSelected(o)}
+                  onClick={() => acceptStandingOffer(o)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card hover-lift"
                 >
                   <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
@@ -149,6 +174,12 @@ export default function SwapPage() {
           <ShieldCheck className="mr-1 inline h-3.5 w-3.5" /> Funds locked in escrow the moment you
           accept. Released after buyer confirms condition.
         </div>
+
+        {message && (
+          <div className="rounded-2xl bg-primary/10 p-3 text-xs font-semibold text-primary">
+            {message}
+          </div>
+        )}
       </div>
     </AppFrame>
   );
@@ -160,12 +191,14 @@ function AcceptedFlow({
   stage,
   setStage,
   onBack,
+  onComplete,
 }: {
   offer: Offer;
   art: Art;
   stage: Stage;
   setStage: (s: Stage) => void;
   onBack: () => void;
+  onComplete: (offer: Offer) => void;
 }) {
   const steps = [
     { icon: CheckCircle2, t: "Offer accepted onchain", d: "Buyer notified instantly" },
@@ -175,7 +208,10 @@ function AcceptedFlow({
     { icon: Coins, t: "Funds released to you", d: `${fmt(offer.cash)} sent to your wallet` },
   ];
 
-  const next = () => stage < 4 && setStage(((stage + 1) as Stage));
+  const next = () => {
+    if (stage === 3) onComplete(offer);
+    if (stage < 4) setStage((stage + 1) as Stage);
+  };
 
   return (
     <div className="space-y-4 px-5 pt-3 pb-6">

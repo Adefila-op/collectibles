@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import { ARTWORKS, fmt } from "@/lib/art-data";
+import { getAllArtworks, fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
 import { ArrowLeft, ShoppingCart } from "lucide-react";
@@ -9,16 +9,17 @@ export default function BuyArt() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Get all artworks that are listed for sale
-  const listedArtworks = user ? getHoldings(user.id) : [];
-  const listedArtIds = new Set(
-    listedArtworks.filter((h) => h.status === "listed").map((h) => h.artId)
+  const allArtworks = getAllArtworks();
+  const allHoldings = getHoldings();
+  const userHeldArtIds = new Set(
+    user ? allHoldings.filter((h) => h.userId === user.id && h.status !== "swapped").map((h) => h.artId) : []
   );
 
-  // Get artworks for sale (those listed by others or available in the system)
-  const availableForPurchase = ARTWORKS.filter(
-    (art) => !listedArtIds.has(art.id) // Available if not in user's listed items
-  );
+  const availableForPurchase = allArtworks.filter((art) => {
+    if (userHeldArtIds.has(art.id)) return false;
+    const activeHolding = allHoldings.find((h) => h.artId === art.id && h.status !== "swapped");
+    return !activeHolding || activeHolding.status === "listed";
+  });
 
   return (
     <AppFrame label="Buy Art">
@@ -51,7 +52,7 @@ export default function BuyArt() {
             <div className="pt-4 space-y-3">
               <div className="text-sm font-semibold">Explore other artworks</div>
               <div className="grid grid-cols-2 gap-3">
-                {ARTWORKS.slice(0, 4).map((a) => (
+                {allArtworks.slice(0, 4).map((a) => (
                   <Link
                     key={a.id}
                     to={`/art/${a.id}`}

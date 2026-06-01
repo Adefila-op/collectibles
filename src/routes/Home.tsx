@@ -1,17 +1,12 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import heroCharacter from "@/assets/hero-character.png";
 import { getAllArtworks, fmt } from "@/lib/art-data";
 import {
-  Instagram,
-  Menu,
   Repeat2,
   Search,
   Send,
-  ShieldCheck,
   ShoppingCart,
   Sparkles,
-  Twitter,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
@@ -163,58 +158,118 @@ export default function Home() {
 
 function DesktopLanding() {
   return (
-    <div className="min-h-screen bg-[#0759e8] p-8 text-white">
-      <section className="relative mx-auto min-h-[calc(100vh-4rem)] max-w-7xl overflow-hidden rounded-[36px] bg-[#0b6fff] px-10 py-9 shadow-[0_30px_90px_rgba(0,24,95,0.35)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_16%,rgba(255,255,255,0.22),transparent_13%),radial-gradient(circle_at_76%_43%,rgba(74,201,255,0.22),transparent_28%),linear-gradient(135deg,#1585ff,#0759e8_64%,#0651d5)]" />
-        <div className="absolute bottom-20 right-28 h-24 w-64 rounded-full bg-[#03245f]/40 blur-2xl" />
+    <div className="min-h-screen bg-white p-8 text-white">
+      <h2 className="sr-only">Collectible landing page - buy resellable artworks directly from artists</h2>
+      <section className="relative mx-auto min-h-[480px] max-w-6xl overflow-hidden rounded-2xl bg-[#1a43d4] font-sans">
+        <div className="absolute -right-[60px] -top-20 h-[300px] w-[300px] rounded-full bg-white/[0.06]" />
+        <div className="absolute -left-10 bottom-5 h-[180px] w-[180px] rounded-full bg-white/[0.06]" />
+        <div className="absolute right-[200px] top-[60px] h-[100px] w-[100px] rounded-full bg-white/[0.06]" />
 
-        <div className="relative z-10 flex items-center justify-between">
-          <Link to="/" className="font-display text-2xl font-black tracking-normal">
-            ARTCHAIN
+        <nav className="relative z-10 flex items-center justify-between px-8 py-5">
+          <Link to="/" className="text-[15px] font-medium tracking-normal text-white">
+            Collectible
           </Link>
-          <div className="flex items-center gap-5 text-white/90">
-            <Instagram className="h-4 w-4" />
-            <Twitter className="h-4 w-4" />
-            <ShieldCheck className="h-4 w-4" />
-          </div>
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-7">
+            <Link to="/explore" className="text-[13px] text-white/65 transition hover:text-white">
+              How it works
+            </Link>
+            <Link to="/explore?section=artists" className="text-[13px] text-white/65 transition hover:text-white">
+              Artists
+            </Link>
             <Link
               to="/explore"
-              className="rounded-full border border-white/80 px-7 py-2.5 text-sm font-bold text-white transition hover:bg-white hover:text-primary"
+              className="rounded-full bg-white px-[18px] py-[7px] text-[13px] font-medium text-[#1a43d4]"
             >
-              Shop Art
+              Shop art
             </Link>
-            <Menu className="h-7 w-7" />
+          </div>
+        </nav>
+
+        <div className="relative z-10 grid grid-cols-2 items-center gap-8 px-8 pb-12 pt-10">
+          <div>
+            <h1 className="mb-5 font-sans text-[42px] font-bold leading-[1.1] tracking-normal text-white">
+              Buy resellable
+              <br />
+              artworks <span className="text-[#8cbeff]">directly</span>
+              <br />
+              from artists
+            </h1>
+            <p className="mb-2 text-sm leading-[1.65] text-white/65">
+              Verified provenance. Transparent ownership.
+              <br />
+              Stronger resale value.
+            </p>
+            <p className="mb-8 text-[13px] leading-[1.65] text-white/40">
+              Collectible is the provenance infrastructure for overlooked art markets, starting with Africa.
+            </p>
+            <div className="flex items-center gap-3">
+              <Link
+                to="/explore"
+                className="rounded-full bg-white px-[22px] py-2.5 text-sm font-medium text-[#1a43d4]"
+              >
+                Shop art
+              </Link>
+              <Link
+                to="/explore"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/25 px-[18px] py-2.5 text-[13px] text-white/65 transition hover:border-white/45 hover:text-white"
+              >
+                Learn more <span aria-hidden="true">-&gt;</span>
+              </Link>
+            </div>
+          </div>
+
+          <div className="flex items-end justify-center">
+            <svg width="220" height="230" viewBox="0 0 220 230" role="img" aria-labelledby="landing-art-title landing-art-desc">
+              <title id="landing-art-title">Floating artwork frame with provenance certificate</title>
+              <desc id="landing-art-desc">An animated 3D-style artwork frame floating against the blue background</desc>
+
+              <ellipse cx="110" cy="210" rx="65" ry="14" fill="rgba(0,0,0,0.18)" className="origin-center animate-pulse" />
+
+              <g className="origin-center animate-float">
+                <rect x="30" y="20" width="130" height="160" rx="6" fill="#1a2a6e" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
+                <rect x="38" y="28" width="114" height="138" rx="4" fill="#0f1a50" />
+
+                <rect x="44" y="34" width="102" height="126" rx="3" fill="#2a1a0e" />
+                <ellipse cx="95" cy="72" rx="28" ry="34" fill="#8B4513" opacity="0.7" />
+                <ellipse cx="95" cy="62" rx="18" ry="20" fill="#D2691E" />
+                <circle cx="88" cy="56" r="3" fill="#1a0a00" />
+                <circle cx="102" cy="56" r="3" fill="#1a0a00" />
+                <path d="M88 65 Q95 70 102 65" stroke="#1a0a00" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                <ellipse cx="95" cy="108" rx="22" ry="26" fill="#8B4513" opacity="0.5" />
+                <rect x="72" y="96" width="46" height="36" rx="2" fill="#D2691E" opacity="0.6" />
+
+                <rect x="44" y="34" width="102" height="126" rx="3" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
+
+                <rect x="38" y="168" width="114" height="16" rx="2" fill="#c9a96e" />
+                <rect x="42" y="169" width="106" height="2" rx="1" fill="rgba(255,255,255,0.3)" />
+                <rect x="38" y="182" width="114" height="4" rx="1" fill="#b8924a" />
+              </g>
+
+              <g className="animate-float" transform="translate(140, 80)">
+                <rect x="0" y="0" width="72" height="44" rx="8" fill="rgba(255,255,255,0.95)" />
+                <circle cx="18" cy="14" r="8" fill="#1a43d4" />
+                <text x="18" y="18" textAnchor="middle" fontSize="9" fill="#fff" fontWeight="700">OK</text>
+                <rect x="30" y="8" width="34" height="3" rx="1" fill="#1a43d4" opacity="0.7" />
+                <rect x="30" y="14" width="24" height="2" rx="1" fill="#888" opacity="0.5" />
+                <rect x="8" y="28" width="56" height="2" rx="1" fill="#eee" />
+                <rect x="8" y="33" width="40" height="2" rx="1" fill="#eee" />
+              </g>
+            </svg>
           </div>
         </div>
 
-        <div className="relative z-10 grid min-h-[calc(100vh-13rem)] grid-cols-[minmax(0,0.9fr)_minmax(420px,1fr)] items-center gap-10">
-          <div>
-            <div className="mb-9 grid h-16 w-16 place-items-center rounded-full bg-white/15 shadow-soft">
-              <ShieldCheck className="h-8 w-8 text-cyan-100" />
+        <div className="relative z-10 flex border-t border-white/10">
+          {[
+            ["2,400+", "Artworks"],
+            ["180+", "Artists"],
+            ["100%", "Verified"],
+            ["Africa-first", "Starting point"],
+          ].map(([value, label]) => (
+            <div key={label} className="flex-1 border-r border-white/10 px-8 py-[1.1rem] last:border-r-0">
+              <div className="mb-0.5 text-lg font-medium text-white">{value}</div>
+              <div className="text-[11px] uppercase tracking-[0.05em] text-white/40">{label}</div>
             </div>
-            <h1 className="font-display text-[clamp(4.5rem,8vw,7.7rem)] font-black leading-[0.94] text-white">
-              Collect
-              <span className="block">Art</span>
-              <span className="block text-cyan-200">with</span>
-              <span className="block text-cyan-200">proof.</span>
-            </h1>
-            <div className="mt-20 text-center font-display text-2xl font-black leading-tight text-white">
-              <div>Say "5/10000"</div>
-              <div>Proofed</div>
-            </div>
-          </div>
-
-          <div className="relative flex min-h-[520px] items-center justify-center">
-            <div className="absolute bottom-16 h-12 w-72 rounded-full bg-[#03245f]/50 blur-xl" />
-            <img
-              src={heroCharacter}
-              alt="ArtChain character holding African artwork"
-              loading="eager"
-              decoding="async"
-              className="relative z-10 w-full max-w-[480px] animate-float drop-shadow-[0_34px_40px_rgba(0,25,96,0.38)]"
-            />
-          </div>
+          ))}
         </div>
       </section>
     </div>

@@ -1,10 +1,17 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import { getAllArtworks, fmt, ARTWORKS, type Art } from "@/lib/art-data";
 import {
-  Activity,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import heroCharacter from "@/assets/hero-character.png";
+import { getAllArtworks, fmt, ARTWORKS, type Art } from "@/lib/art-data";
+import { OFFERS } from "@/lib/offers-data";
+import {
   ArrowRight,
-  BadgeCheck,
   Bell,
   Bookmark,
   CalendarDays,
@@ -30,11 +37,22 @@ import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings, type UserHolding } from "@/lib/db";
 
-type DashboardSection = "explore" | "collections" | "portfolio" | "artists";
-const dashboardSections: DashboardSection[] = ["explore", "collections", "portfolio", "artists"];
+type DashboardSection = "explore" | "portfolio" | "artists";
+const dashboardSections: DashboardSection[] = ["explore", "portfolio", "artists"];
+const NAIRA_PER_USDC = 1500;
+const NETWORKS = ["Base", "Ethereum", "Polygon"] as const;
+
+function walletAddressForUser(userId: string) {
+  let hash = "";
+  for (let i = 0; i < 40; i++) {
+    const code = userId.charCodeAt(i % userId.length) + i * 17;
+    hash += (code % 16).toString(16);
+  }
+  return `0x${hash}`;
+}
 
 export default function Explore() {
-  const { user } = useAuth();
+  const { user, updateWalletBalance } = useAuth();
   const initialSection = new URLSearchParams(window.location.search).get("section");
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -115,7 +133,9 @@ export default function Explore() {
           userOwnedArtIds={userOwnedArtIds}
           userHoldings={userHoldings}
           userName={user?.name || "Kwame Mensah"}
+          userId={user?.id || "demo-user"}
           walletBalance={user?.walletBalance || 1240500}
+          onWalletBalanceChange={updateWalletBalance}
           initials={user?.avatar || "KM"}
         />
       }
@@ -335,7 +355,9 @@ function DesktopMarketplace({
   userOwnedArtIds,
   userHoldings,
   userName,
+  userId,
   walletBalance,
+  onWalletBalanceChange,
   initials,
 }: {
   artworks: Art[];
@@ -355,15 +377,23 @@ function DesktopMarketplace({
   userOwnedArtIds: Set<string>;
   userHoldings: UserHolding[];
   userName: string;
+  userId: string;
   walletBalance: number;
+  onWalletBalanceChange: (nextBalance: number) => { ok: true } | { ok: false; error: string };
   initials: string;
 }) {
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("100");
+  const [network, setNetwork] = useState<(typeof NETWORKS)[number]>("Base");
+  const [depositMessage, setDepositMessage] = useState("");
   const categories = ["Painting", "Sculpture", "Textile", "Beadwork", "Photo"];
   const cities = ["Lagos", "Dakar", "Accra", "Ibadan", "Senegal"];
   const statuses = ["For sale", "Swap only", "Any"];
+  const walletAddress = walletAddressForUser(userId);
+  const depositNaira = Math.max(0, Math.round((Number(depositAmount) || 0) * NAIRA_PER_USDC));
   const featured = artworks[0] || ARTWORKS[0];
   const totalValue = artworks.reduce((sum, art) => sum + art.price, 0);
-  const visibleArtworks = activeSection === "collections" ? allArtworks : artworks;
+  const visibleArtworks = artworks;
   const portfolioItems = userHoldings
     .filter((holding) => holding.status === "owned" || holding.status === "listed")
     .map((holding) => ({
@@ -391,6 +421,18 @@ function DesktopMarketplace({
     categories: Array.from(artist.categories),
   }));
 
+  function handleDeposit() {
+    if (depositNaira <= 0) {
+      setDepositMessage("Enter a deposit amount first.");
+      return;
+    }
+
+    const result = onWalletBalanceChange(walletBalance + depositNaira);
+    setDepositMessage(
+      result.ok ? `${depositAmount} USDC received on ${network}. Liquid balance updated.` : result.error
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f6f8ff] text-slate-950">
       <div className="grid min-h-screen grid-cols-[260px_minmax(0,1fr)]">
@@ -405,12 +447,8 @@ function DesktopMarketplace({
             {[
               { label: "Home", icon: HomeIcon, to: "/" },
               { label: "Explore", icon: Search, section: "explore" },
-              { label: "Collections", icon: PackageCheck, section: "collections" },
               { label: "My Portfolio", icon: Wallet, section: "portfolio" },
-              { label: "Activity", icon: Activity, section: "portfolio" },
               { label: "Artists", icon: UserRound, section: "artists" },
-              { label: "Offers", icon: Send, to: "/offer" },
-              { label: "Certificates", icon: BadgeCheck, section: "portfolio" },
             ].map((item) => (
               "to" in item ? (
               <Link
@@ -466,17 +504,21 @@ function DesktopMarketplace({
                 </div>
               </div>
               <div className="mt-5 border-t border-slate-100 pt-4">
-                <div className="text-xs text-slate-500">Wallet Balance</div>
+                <div className="text-xs text-slate-500">Liquid Balance</div>
                 <div className="mt-1 text-xl font-bold">{walletBalance.toLocaleString()} AC</div>
                 <div className="text-xs text-slate-500">~ ${(walletBalance / 100).toLocaleString()} USD</div>
               </div>
             </div>
-            <Link
-              to="/profile"
+            <button
+              type="button"
+              onClick={() => {
+                setDepositOpen(true);
+                setDepositMessage("");
+              }}
               className="flex items-center justify-center rounded-2xl bg-primary-grad px-4 py-3 text-sm font-semibold text-white shadow-glow"
             >
               Top Up Wallet
-            </Link>
+            </button>
           </div>
         </aside>
 
@@ -487,7 +529,7 @@ function DesktopMarketplace({
               <input
                 value={searchQuery}
                 onChange={(event) => onSearchChange(event.target.value)}
-                placeholder="Search artworks, artists, collections..."
+                placeholder="Search artworks, artists, cities..."
                 className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
               />
             </div>
@@ -504,9 +546,7 @@ function DesktopMarketplace({
 
           <div
             className={`mx-auto mt-8 grid max-w-[1500px] gap-7 ${
-              activeSection === "explore" || activeSection === "collections"
-                ? "grid-cols-[minmax(0,1fr)_340px]"
-                : "grid-cols-1"
+              activeSection === "explore" ? "grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1"
             }`}
           >
             <section className="space-y-6">
@@ -520,17 +560,13 @@ function DesktopMarketplace({
                 <div className="grid grid-cols-[1fr_320px] items-center gap-8">
                   <div>
                     <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-semibold text-primary">
-                      <ShieldCheck className="h-4 w-4" /> {activeSection === "collections" ? "Complete collection" : "Marketplace with proof"}
+                      <ShieldCheck className="h-4 w-4" /> Marketplace with proof
                     </div>
                     <h1 className="mt-6 font-display text-5xl font-black leading-tight">
-                      {activeSection === "collections"
-                        ? "All verified art, collected in one dashboard."
-                        : "Buy, offer, and swap physical art with onchain history."}
+                      Buy, offer, and swap physical art with onchain history.
                     </h1>
                     <p className="mt-4 max-w-2xl text-base leading-7 text-slate-700">
-                      {activeSection === "collections"
-                        ? "Browse the full ArtChain catalogue without leaving the desktop dashboard."
-                        : "Browse verified works with unique IDs, certificates, ownership records, exhibition history, restoration notes, and valuation signals."}
+                      Browse verified works with unique IDs, certificates, ownership records, exhibition history, restoration notes, and valuation signals.
                     </p>
                   </div>
                   <img
@@ -547,7 +583,7 @@ function DesktopMarketplace({
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <h2 className="font-display text-xl font-semibold">
-                      {activeSection === "collections" ? "All art" : "Marketplace"}
+                      Marketplace
                     </h2>
                     <div className="text-sm text-slate-500">
                       {visibleArtworks.length} verified result{visibleArtworks.length === 1 ? "" : "s"}
@@ -628,7 +664,7 @@ function DesktopMarketplace({
               )}
             </section>
 
-            {(activeSection === "explore" || activeSection === "collections") && (
+            {activeSection === "explore" && (
             <aside className="space-y-5">
               <div className="rounded-[28px] bg-white p-6 shadow-sm">
                 <h2 className="font-display text-lg font-semibold">Filter Artwork</h2>
@@ -689,6 +725,74 @@ function DesktopMarketplace({
           </div>
         </main>
       </div>
+
+      <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
+        <DialogContent className="max-w-[420px] overflow-hidden rounded-3xl border-0 p-0">
+          <div className="bg-[hsl(var(--ink))] p-5 text-white">
+            <DialogHeader>
+              <DialogTitle className="text-left text-xl">Deposit crypto</DialogTitle>
+              <DialogDescription className="text-left text-white/55">
+                Send USDC to your built-in ArtChain wallet.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mt-4 rounded-2xl bg-white/10 p-3">
+              <div className="text-[11px] text-white/45">Built-in wallet</div>
+              <div className="mt-1 break-all font-mono text-xs">{walletAddress}</div>
+            </div>
+          </div>
+
+          <div className="space-y-4 p-5">
+            <div>
+              <div className="mb-2 text-xs font-semibold text-slate-500">Network</div>
+              <div className="grid grid-cols-3 gap-2">
+                {NETWORKS.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setNetwork(item)}
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                      network === item ? "bg-primary text-white" : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-500">Amount to credit</label>
+              <div className="mt-2 flex items-center rounded-2xl bg-slate-100 px-3 py-2.5">
+                <input
+                  value={depositAmount}
+                  onChange={(event) => {
+                    setDepositAmount(event.target.value);
+                    setDepositMessage("");
+                  }}
+                  inputMode="decimal"
+                  className="min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+                />
+                <span className="text-xs font-semibold text-slate-500">USDC</span>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">Credits {fmt(depositNaira)}</div>
+            </div>
+
+            {depositMessage && (
+              <div className="rounded-2xl bg-primary/10 p-3 text-xs font-medium text-primary">
+                {depositMessage}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleDeposit}
+              className="w-full rounded-2xl bg-primary py-3 text-sm font-semibold text-white shadow-glow"
+            >
+              Confirm deposit
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -704,84 +808,270 @@ function PortfolioDashboard({
   userName: string;
   initials: string;
 }) {
-  const artValue = items.reduce((sum, item) => sum + item.art.price, 0);
-  const listedCount = items.filter((item) => item.holding.status === "listed").length;
+  const collectionItems =
+    items.length > 0
+      ? items
+      : ARTWORKS.slice(0, 3).map((art, index) => ({
+          art,
+          holding: {
+            id: `demo-${art.id}`,
+            userId: "demo",
+            artId: art.id,
+            status: index === 1 ? "listed" as const : "owned" as const,
+            acquiredAt: "2026-05-12T12:00:00.000Z",
+          },
+        }));
+  const [selectedArtId, setSelectedArtId] = useState(collectionItems[0]?.art.id || "");
+  const [transferRoute, setTransferRoute] = useState<"platform" | "onchain">("platform");
+  const [recipient, setRecipient] = useState("collector@artchain");
+  const [transferNote, setTransferNote] = useState("");
+  const [transferMessage, setTransferMessage] = useState("");
+  const activeHolding = collectionItems.find((item) => item.art.id === selectedArtId) || collectionItems[0];
+  const heldArtIds = new Set(collectionItems.map((item) => item.art.id));
+  const artValue = collectionItems.reduce((sum, item) => sum + item.art.price, 0);
+  const listedCount = collectionItems.filter((item) => item.holding.status === "listed").length;
+  const generalBalance = walletBalance + artValue;
+  const activeOffers = OFFERS.filter((offer) => collectionItems.some((item) => item.art.category === offer.category)).slice(0, 4);
+  const suggestedArt = ARTWORKS.filter((art) => !heldArtIds.has(art.id)).slice(0, 3);
 
   return (
-    <>
-      <div className="rounded-[28px] bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between gap-6">
-          <div>
-            <div className="text-sm font-semibold text-primary">My Portfolio</div>
-            <h1 className="mt-2 font-display text-4xl font-black">Your wallet and artwork, inside the dashboard.</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Track owned works, listed pieces, and portfolio value without leaving the desktop workspace.
-            </p>
-          </div>
-          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-slate-950 text-sm font-semibold text-white">
-              {initials}
-            </div>
+    <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="space-y-6">
+        <section className="rounded-[28px] bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-6">
             <div>
-              <div className="text-sm font-semibold">{userName}</div>
-              <div className="text-xs text-slate-500">Collector portfolio</div>
+              <div className="text-sm font-semibold text-primary">My Portfolio</div>
+              <h1 className="mt-2 font-display text-4xl font-black">Collection balance and transfers.</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                Track liquid funds, collection value, and collection transfers from the desktop dashboard.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+                {initials}
+              </div>
+              <div>
+                <div className="text-sm font-semibold">{userName}</div>
+                <div className="text-xs text-slate-500">Collector portfolio</div>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="mt-6 grid grid-cols-3 gap-4">
-          {[
-            ["Wallet balance", `${walletBalance.toLocaleString()} AC`],
-            ["Artwork value", fmt(artValue)],
-            ["Listed works", listedCount.toLocaleString()],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-xs text-slate-500">{label}</div>
-              <div className="mt-1 text-2xl font-bold">{value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-[28px] bg-white p-5 shadow-sm">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h2 className="font-display text-xl font-semibold">Owned artwork</h2>
-            <div className="text-sm text-slate-500">{items.length} portfolio item{items.length === 1 ? "" : "s"}</div>
-          </div>
-        </div>
-        {items.length > 0 ? (
-          <div className="grid grid-cols-4 gap-5">
-            {items.map(({ holding, art }) => (
-              <article key={holding.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-                <Link to={`/art/${art.id}`} className="block h-52 overflow-hidden">
-                  <img src={art.image} alt={art.name} className="h-full w-full object-cover" />
-                </Link>
-                <div className="p-4">
-                  <Link to={`/art/${art.id}`} className="block truncate text-sm font-semibold hover:text-primary">
-                    {art.name}
-                  </Link>
-                  <div className="mt-1 truncate text-xs text-slate-500">{art.artist} - {art.city}</div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="font-semibold">{fmt(art.price)}</span>
-                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
-                      {holding.status}
-                    </span>
-                  </div>
-                </div>
-              </article>
+          <div className="mt-6 grid grid-cols-3 gap-4">
+            {[
+              ["General balance", fmt(generalBalance), "Liquid + collection"],
+              ["Liquid balance", `${walletBalance.toLocaleString()} AC`, "Spendable wallet"],
+              ["Portfolio balance", fmt(artValue), `${collectionItems.length} held, ${listedCount} listed`],
+            ].map(([label, value, meta]) => (
+              <div key={label} className="rounded-2xl bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">{label}</div>
+                <div className="mt-1 text-2xl font-bold">{value}</div>
+                <div className="mt-1 text-xs text-slate-500">{meta}</div>
+              </div>
             ))}
           </div>
-        ) : (
-          <div className="grid min-h-[260px] place-items-center rounded-2xl bg-slate-50 text-center">
-            <div>
-              <Wallet className="mx-auto h-9 w-9 text-slate-400" />
-              <div className="mt-3 text-sm font-semibold">No portfolio artwork yet</div>
-              <div className="mt-1 text-sm text-slate-500">Purchases and listings will appear here.</div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="rounded-[28px] bg-white p-5 shadow-sm">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-xl font-semibold">Collection holdings</h2>
+                <div className="text-sm text-slate-500">Choose a work to route inside the transfer frame</div>
+              </div>
+              <PackageCheck className="h-5 w-5 text-primary" />
+            </div>
+            <div className="space-y-3">
+              {collectionItems.map(({ holding, art }) => (
+                <button
+                  key={holding.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedArtId(art.id);
+                    setTransferMessage("");
+                  }}
+                  className={`flex w-full items-center gap-4 rounded-2xl p-3 text-left transition ${
+                    activeHolding?.art.id === art.id
+                      ? "bg-primary/10 ring-1 ring-primary/20"
+                      : "bg-slate-50 hover:bg-slate-100"
+                  }`}
+                >
+                  <img src={art.image} alt={art.name} className="h-20 w-20 rounded-2xl object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{art.name}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500">{art.artist} - {art.city}</div>
+                    <div className="mt-3 flex items-center gap-2 text-[10px] font-semibold">
+                      <span className="rounded-full bg-white px-2 py-1 text-primary">{holding.status}</span>
+                      <span className="rounded-full bg-white px-2 py-1 text-slate-600">{art.category}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold">{fmt(art.price)}</div>
+                    <div className="text-xs text-slate-500">#{art.token}</div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
-        )}
+
+          <div className="rounded-[28px] bg-white p-5 shadow-sm">
+            <div className="relative mx-auto mb-3 grid h-32 w-44 place-items-end overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#0b6fff,#19c6ff)]">
+              <div className="absolute inset-x-5 top-4 flex items-center justify-between text-xs font-semibold text-white/85">
+                <span>ArtChain</span>
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <img
+                src={heroCharacter}
+                alt="ArtChain blue platform mascot"
+                className="relative z-10 h-28 object-contain drop-shadow-[0_18px_22px_rgba(0,24,95,0.35)]"
+              />
+            </div>
+            <h2 className="text-center font-display text-lg font-semibold">Route collection</h2>
+            <div className="mt-4 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
+              {[
+                ["platform", "ArtChain user"],
+                ["onchain", "Onchain route"],
+              ].map(([route, label]) => (
+                <button
+                  key={route}
+                  type="button"
+                  onClick={() => {
+                    setTransferRoute(route as "platform" | "onchain");
+                    setTransferMessage("");
+                  }}
+                  className={`rounded-xl px-3 py-2 transition ${
+                    transferRoute === route ? "bg-slate-950 text-white shadow-sm" : "text-slate-600"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500">Collection</span>
+                <select
+                  value={selectedArtId}
+                  onChange={(event) => {
+                    setSelectedArtId(event.target.value);
+                    setTransferMessage("");
+                  }}
+                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold outline-none focus:border-primary"
+                >
+                  {collectionItems.map(({ art }) => (
+                    <option key={art.id} value={art.id}>{art.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500">
+                  {transferRoute === "platform" ? "Send to ArtChain user" : "Wallet or ENS destination"}
+                </span>
+                <input
+                  value={recipient}
+                  onChange={(event) => {
+                    setRecipient(event.target.value);
+                    setTransferMessage("");
+                  }}
+                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500">Transfer note</span>
+                <input
+                  value={transferNote}
+                  onChange={(event) => setTransferNote(event.target.value)}
+                  placeholder="Optional private memo"
+                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-primary"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="text-slate-500">Route fee</div>
+                  <div className="mt-1 font-bold">{transferRoute === "platform" ? "0 AC" : "12 AC"}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <div className="text-slate-500">Route status</div>
+                  <div className="mt-1 font-bold">{transferRoute === "platform" ? "Instant" : "Onchain"}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setTransferMessage(
+                    `${activeHolding?.art.name || "Collection"} routed to ${recipient || "recipient"} via ${
+                      transferRoute === "platform" ? "ArtChain" : "onchain"
+                    }.`
+                  )
+                }
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-glow"
+              >
+                <Send className="h-4 w-4" /> Send collection
+              </button>
+              {transferMessage && (
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-700">
+                  {transferMessage}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
-    </>
+
+      <aside className="space-y-6">
+        <section className="rounded-[28px] bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-lg font-semibold">Active offers</h2>
+              <div className="text-xs text-slate-500">Open demand for held categories</div>
+            </div>
+            <TrendingUp className="h-5 w-5 text-emerald-500" />
+          </div>
+          <div className="space-y-3">
+            {activeOffers.map((offer) => (
+              <div key={offer.id} className="rounded-2xl bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-white text-xs font-bold text-primary shadow-sm">
+                      {offer.buyerInitials}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold">{offer.buyer}</div>
+                      <div className="text-xs text-slate-500">{offer.buyerCity} - {offer.category}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold">{fmt(offer.cash)}</div>
+                    <Link to="/offer" className="text-xs font-semibold text-primary">Review</Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-[28px] bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-lg font-semibold">Suggested art</h2>
+              <div className="text-xs text-slate-500">Additions based on your holdings</div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-slate-400" />
+          </div>
+          <div className="space-y-3">
+            {suggestedArt.map((art) => (
+              <Link key={art.id} to={`/art/${art.id}`} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 transition hover:bg-slate-100">
+                <img src={art.image} alt={art.name} className="h-14 w-14 rounded-2xl object-cover" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{art.name}</div>
+                  <div className="truncate text-xs text-slate-500">{art.artist}</div>
+                </div>
+                <div className="text-right text-xs font-semibold">{fmt(art.price)}</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      </aside>
+    </div>
   );
 }
 
