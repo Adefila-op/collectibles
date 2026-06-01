@@ -441,7 +441,7 @@ function DesktopMarketplace({
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary-grad text-white shadow-soft">
               <ShieldCheck className="h-5 w-5" />
             </div>
-            <span className="font-display text-xl font-black">ArtChain</span>
+            <span className="font-display text-xl font-black">COllectible</span>
           </Link>
           <nav className="mt-10 space-y-1 text-sm">
             {[
@@ -732,7 +732,7 @@ function DesktopMarketplace({
             <DialogHeader>
               <DialogTitle className="text-left text-xl">Deposit crypto</DialogTitle>
               <DialogDescription className="text-left text-white/55">
-                Send USDC to your built-in ArtChain wallet.
+                Send USDC to your built-in COllectible wallet.
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 rounded-2xl bg-white/10 p-3">
@@ -916,19 +916,19 @@ function PortfolioDashboard({
           <div className="rounded-[28px] bg-white p-5 shadow-sm">
             <div className="relative mx-auto mb-3 grid h-32 w-44 place-items-end overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#0b6fff,#19c6ff)]">
               <div className="absolute inset-x-5 top-4 flex items-center justify-between text-xs font-semibold text-white/85">
-                <span>ArtChain</span>
+                <span>COllectible</span>
                 <ShieldCheck className="h-4 w-4" />
               </div>
               <img
                 src={heroCharacter}
-                alt="ArtChain blue platform mascot"
+                alt="COllectible blue platform mascot"
                 className="relative z-10 h-28 object-contain drop-shadow-[0_18px_22px_rgba(0,24,95,0.35)]"
               />
             </div>
             <h2 className="text-center font-display text-lg font-semibold">Route collection</h2>
             <div className="mt-4 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
               {[
-                ["platform", "ArtChain user"],
+                ["platform", "COllectible user"],
                 ["onchain", "Onchain route"],
               ].map(([route, label]) => (
                 <button
@@ -964,7 +964,7 @@ function PortfolioDashboard({
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-500">
-                  {transferRoute === "platform" ? "Send to ArtChain user" : "Wallet or ENS destination"}
+                  {transferRoute === "platform" ? "Send to COllectible user" : "Wallet or ENS destination"}
                 </span>
                 <input
                   value={recipient}
@@ -999,7 +999,7 @@ function PortfolioDashboard({
                 onClick={() =>
                   setTransferMessage(
                     `${activeHolding?.art.name || "Collection"} routed to ${recipient || "recipient"} via ${
-                      transferRoute === "platform" ? "ArtChain" : "onchain"
+                      transferRoute === "platform" ? "COllectible" : "onchain"
                     }.`
                   )
                 }

@@ -90,7 +90,7 @@ export function AuthModal({ open, defaultTab = "signin", onClose }: AuthModalPro
               <span className="text-lg font-bold text-white">⛓</span>
             </div>
             <h2 className="font-display text-xl font-semibold">
-              {tab === "signin" ? "Welcome back" : "Join ArtChain"}
+              {tab === "signin" ? "Welcome back" : "Join COllectible"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {tab === "signin"

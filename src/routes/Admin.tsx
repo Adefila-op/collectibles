@@ -3,7 +3,7 @@ import { AppFrame } from "@/components/AppFrame";
 import { getUsers, updateArtistStatus, type User } from "@/lib/db";
 import { Check, ExternalLink, ShieldCheck, X } from "lucide-react";
 
-const ADMIN_CODE = "ARTCHAIN-ADMIN";
+const ADMIN_CODE = "COLLECTIBLE-ADMIN";
 
 export default function Admin() {
   const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem("artchain_admin") === "true");

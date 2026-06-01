@@ -1,4 +1,4 @@
-# ArtChain - African Art Portfolio Management Platform
+# COllectible - African Art Portfolio Management Platform
 
 An onchain portfolio management platform for buying, selling, and tracking African artwork ownership.
 

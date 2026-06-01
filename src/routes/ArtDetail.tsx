@@ -69,7 +69,7 @@ function DesktopSidebar() {
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary-grad text-white shadow-soft">
           <ShieldCheck className="h-5 w-5" />
         </div>
-        <span className="font-display text-xl font-black">ArtChain</span>
+        <span className="font-display text-xl font-black">COllectible</span>
       </Link>
       <nav className="mt-10 space-y-1 text-sm">
         {[
@@ -154,7 +154,7 @@ function DesktopArtworkDetail({
                   <h2 className="mt-5 font-display text-4xl font-black leading-tight">{art.name}</h2>
                   <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
                     A documented {art.category.toLowerCase()} from {art.city}, connected to artist records,
-                    ownership history, and market offers in ArtChain.
+                    ownership history, and market offers in COllectible.
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-950 px-4 py-3 text-right text-white">
@@ -265,7 +265,7 @@ function DesktopArtworkDetail({
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   {art.artist} creates collectible {art.category.toLowerCase()} works shaped by {art.city}'s
                   visual culture, studio practice, and documented provenance. This artist has {artistWorks.length}{" "}
-                  verified work{artistWorks.length === 1 ? "" : "s"} on ArtChain.
+                  verified work{artistWorks.length === 1 ? "" : "s"} on COllectible.
                 </p>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3">
@@ -334,7 +334,7 @@ export default function ArtDetail() {
   const uniqueId = a.uniqueId || makeUniqueId(a.id);
   const certificate = a.certificate || {
     id: `CERT-${uniqueId.replace(/^ART-/, "")}`,
-    issuer: "ArtChain Vault",
+    issuer: "COllectible Vault",
     issuedAt: a.createdAt || `${a.year}`,
     status: "verified" as const,
   };
@@ -354,7 +354,7 @@ export default function ArtDetail() {
                 {
                   title: currentOwner.userName,
                   date: "Current",
-                  detail: "Current collector of record on ArtChain.",
+                  detail: "Current collector of record on COllectible.",
                   reference: "Active holding",
                 },
               ]
@@ -379,7 +379,7 @@ export default function ArtDetail() {
           {
             date: "Current",
             amount: a.price,
-            source: "Current ArtChain listing",
+            source: "Current COllectible listing",
             reference: a.token,
           },
         ];

@@ -68,7 +68,7 @@ export default function ArtistProfile() {
     ? {
         name: approvedUser.name,
         type: approvedUser.artistType || "Artist",
-        bio: approvedUser.artistBio || "Approved ArtChain artist.",
+        bio: approvedUser.artistBio || "Approved COllectible artist.",
         portfolioUrl: approvedUser.portfolioUrl || "",
         socialUrl: approvedUser.socialUrl || "",
         liveLocation: approvedUser.liveLocation || "Location shared on request",

@@ -202,7 +202,7 @@ function AcceptedFlow({
 }) {
   const steps = [
     { icon: CheckCircle2, t: "Offer accepted onchain", d: "Buyer notified instantly" },
-    { icon: Truck, t: "Ship piece to ArtChain vault", d: "Drop-off at Lagos hub" },
+    { icon: Truck, t: "Ship piece to COllectible vault", d: "Drop-off at Lagos hub" },
     { icon: ShieldCheck, t: "Condition reviewed", d: "Buyer notified of audit result" },
     { icon: Sparkles, t: "Buyer approves", d: "Token transferred onchain" },
     { icon: Coins, t: "Funds released to you", d: `${fmt(offer.cash)} sent to your wallet` },

@@ -159,7 +159,7 @@ export default function Home() {
 function DesktopLanding() {
   return (
     <div className="min-h-screen bg-[#1a43d4] text-white">
-      <h2 className="sr-only">Collectible landing page - buy resellable artworks directly from artists</h2>
+      <h2 className="sr-only">COllectible landing page - buy resellable artworks directly from artists</h2>
       <section className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#1a43d4] font-sans">
         <div className="absolute -right-[60px] -top-20 h-[300px] w-[300px] rounded-full bg-white/[0.06]" />
         <div className="absolute -left-10 bottom-5 h-[180px] w-[180px] rounded-full bg-white/[0.06]" />
@@ -167,7 +167,7 @@ function DesktopLanding() {
 
         <nav className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-10 py-6">
           <Link to="/" className="text-[15px] font-medium tracking-normal text-white">
-            Collectible
+            COllectible
           </Link>
           <div className="flex items-center gap-7">
             <Link to="/explore" className="text-[13px] text-white/65 transition hover:text-white">
@@ -200,7 +200,7 @@ function DesktopLanding() {
               Stronger resale value.
             </p>
             <p className="mb-10 max-w-xl text-[15px] leading-[1.65] text-white/40">
-              Collectible is the provenance infrastructure for overlooked art markets, starting with Africa.
+              COllectible is the provenance infrastructure for overlooked art markets, starting with Africa.
             </p>
             <div className="flex items-center gap-3">
               <Link

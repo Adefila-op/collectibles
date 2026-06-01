@@ -572,7 +572,7 @@ export function addArtwork(
     uniqueId: `ART-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
     certificate: {
       id: `CERT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-      issuer: "ArtChain Vault",
+      issuer: "COllectible Vault",
       issuedAt: new Date().toISOString(),
       status: "verified",
     },
@@ -580,7 +580,7 @@ export function addArtwork(
       {
         title: artist.trim(),
         date: new Date().toISOString(),
-        detail: "Artist minted and listed the work on ArtChain.",
+        detail: "Artist minted and listed the work on COllectible.",
         reference: "Primary listing",
         value: price,
       },

@@ -342,7 +342,7 @@ export default function Profile() {
               </DialogTitle>
               <DialogDescription className="text-left text-white/55">
                 {walletMode === "deposit"
-                  ? "Send USDC to your built-in ArtChain wallet."
+                  ? "Send USDC to your built-in COllectible wallet."
                   : "Send funds out from your spending balance."}
               </DialogDescription>
             </DialogHeader>
