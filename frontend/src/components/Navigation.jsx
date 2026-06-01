@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 const Navigation = () => {
-  const { user, logout, isAuthenticated } = useAuthStore();
+  const { logout, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = React.useState(false);

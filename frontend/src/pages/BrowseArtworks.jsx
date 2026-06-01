@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import ArtworkCard from '../components/ArtworkCard';
 import { artworkAPI } from '../utils/api';
@@ -9,11 +8,7 @@ const BrowseArtworks = () => {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ medium: '', condition: '' });
 
-  useEffect(() => {
-    fetchArtworks();
-  }, []);
-
-  const fetchArtworks = async () => {
+  const fetchArtworks = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await artworkAPI.getAll(filters);
@@ -23,7 +18,11 @@ const BrowseArtworks = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
+
+  useEffect(() => {
+    fetchArtworks();
+  }, [fetchArtworks]);
 
   return (
     <div className="min-h-screen bg-white">

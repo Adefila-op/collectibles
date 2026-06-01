@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { swapAPI } from '../utils/api';
 import { useAuthStore } from '../store/authStore';
 import Timeline from '../components/Timeline';
-import { formatCurrency, getTimeAgo } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 
 const Dashboard = () => {
   const { user } = useAuthStore();
@@ -15,11 +15,7 @@ const Dashboard = () => {
     pendingApprovals: 0,
   });
 
-  useEffect(() => {
-    fetchSwaps();
-  }, []);
-
-  const fetchSwaps = async () => {
+  const fetchSwaps = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await swapAPI.getAll({ userId: user?.id });
@@ -35,7 +31,11 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchSwaps();
+  }, [fetchSwaps]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

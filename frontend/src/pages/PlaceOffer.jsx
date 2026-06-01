@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { artworkAPI, offerAPI } from '../utils/api';
@@ -18,11 +18,7 @@ const PlaceOffer = () => {
     cashAmount: 0,
   });
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const { data: artwork } = await artworkAPI.getById(id);
@@ -35,7 +31,11 @@ const PlaceOffer = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, user?.id]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

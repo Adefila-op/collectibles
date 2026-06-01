@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FiCheck } from 'react-icons/fi';
-import { formatCurrency, getTimeAgo } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 
 const ArtworkCard = ({ artwork, showOffers = false }) => {
   const emojiMap = {

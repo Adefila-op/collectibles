@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { artworkAPI } from '../utils/api';
 import { useAuthStore } from '../store/authStore';
@@ -19,11 +18,7 @@ const MyCollection = () => {
     estimatedValue: 0,
   });
 
-  useEffect(() => {
-    fetchCollection();
-  }, []);
-
-  const fetchCollection = async () => {
+  const fetchCollection = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await artworkAPI.getAll({ owner: user?.id });
@@ -33,7 +28,11 @@ const MyCollection = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchCollection();
+  }, [fetchCollection]);
 
   const handleAddArtwork = async (e) => {
     e.preventDefault();

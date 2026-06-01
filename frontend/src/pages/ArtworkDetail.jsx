@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { artworkAPI, offerAPI } from '../utils/api';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 import { useAuthStore } from '../store/authStore';
 
 const ArtworkDetail = () => {
@@ -13,11 +13,7 @@ const ArtworkDetail = () => {
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchArtworkDetails();
-  }, [id]);
-
-  const fetchArtworkDetails = async () => {
+  const fetchArtworkDetails = useCallback(async () => {
     try {
       setLoading(true);
       const { data: artworkData } = await artworkAPI.getById(id);
@@ -31,7 +27,11 @@ const ArtworkDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, navigate]);
+
+  useEffect(() => {
+    fetchArtworkDetails();
+  }, [fetchArtworkDetails]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!artwork) return <div className="min-h-screen flex items-center justify-center">Artwork not found</div>;

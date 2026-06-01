@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { userAPI, artworkAPI } from '../utils/api';
@@ -10,11 +10,7 @@ const CollectorProfile = () => {
   const [collection, setCollection] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchCollectorData();
-  }, [id]);
-
-  const fetchCollectorData = async () => {
+  const fetchCollectorData = useCallback(async () => {
     try {
       setLoading(true);
       const { data: collectorData } = await userAPI.getById(id);
@@ -27,7 +23,11 @@ const CollectorProfile = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchCollectorData();
+  }, [fetchCollectorData]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!collector) return <div className="min-h-screen flex items-center justify-center">Collector not found</div>;

@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { offerAPI } from '../utils/api';
 import { useAuthStore } from '../store/authStore';
 import OfferCard from '../components/OfferCard';
-import { formatCurrency } from '../utils/formatters';
 
 const MyOffers = () => {
   const { user } = useAuthStore();
@@ -11,11 +10,7 @@ const MyOffers = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => {
-    fetchOffers();
-  }, []);
-
-  const fetchOffers = async () => {
+  const fetchOffers = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await offerAPI.getAll();
@@ -25,7 +20,11 @@ const MyOffers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchOffers();
+  }, [fetchOffers]);
 
   const handleAcceptOffer = async (offerId) => {
     try {
