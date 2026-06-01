@@ -12,7 +12,6 @@ import {
   ShoppingCart,
   Sparkles,
   Twitter,
-  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
@@ -200,12 +199,6 @@ function DesktopLanding() {
               <span className="block text-cyan-200">with</span>
               <span className="block text-cyan-200">proof.</span>
             </h1>
-            <Link
-              to="/profile"
-              className="mt-9 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-black text-primary shadow-soft transition hover:bg-cyan-100"
-            >
-              <Wallet className="h-4 w-4" /> Connect Wallet
-            </Link>
             <div className="mt-20 text-center font-display text-2xl font-black leading-tight text-white">
               <div>Say "5/10000"</div>
               <div>Proofed</div>

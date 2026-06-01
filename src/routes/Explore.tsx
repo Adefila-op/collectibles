@@ -24,7 +24,9 @@ import {
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings } from "@/lib/db";
+import { getHoldings, type UserHolding } from "@/lib/db";
+
+type DashboardSection = "explore" | "collections" | "portfolio" | "artists";
 
 export default function Explore() {
   const { user } = useAuth();
@@ -34,12 +36,14 @@ export default function Explore() {
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [priceRange, setPriceRange] = useState({ min: 50000, max: 2000000 });
+  const [activeSection, setActiveSection] = useState<DashboardSection>("explore");
 
+  const allArtworks = useMemo(() => getAllArtworks(), []);
   const userHoldings = user ? getHoldings(user.id) : [];
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
 
   const filteredArtworks = useMemo(() => {
-    let results = getAllArtworks();
+    let results = allArtworks;
 
     // Search filter
     if (searchQuery.trim()) {
@@ -73,7 +77,7 @@ export default function Explore() {
     }
 
     return results;
-  }, [searchQuery, selectedCategory, selectedCity, selectedStatus, priceRange, userOwnedArtIds]);
+  }, [allArtworks, searchQuery, selectedCategory, selectedCity, selectedStatus, priceRange, userOwnedArtIds]);
 
   return (
     <AppFrame
@@ -81,6 +85,7 @@ export default function Explore() {
       desktop={
         <DesktopMarketplace
           artworks={filteredArtworks}
+          allArtworks={allArtworks}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           selectedCategory={selectedCategory}
@@ -91,7 +96,10 @@ export default function Explore() {
           onStatusChange={setSelectedStatus}
           priceRange={priceRange}
           onPriceRangeChange={setPriceRange}
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
           userOwnedArtIds={userOwnedArtIds}
+          userHoldings={userHoldings}
           userName={user?.name || "Kwame Mensah"}
           walletBalance={user?.walletBalance || 1240500}
           initials={user?.avatar || "KM"}
@@ -297,6 +305,7 @@ export default function Explore() {
 
 function DesktopMarketplace({
   artworks,
+  allArtworks,
   searchQuery,
   onSearchChange,
   selectedCategory,
@@ -307,12 +316,16 @@ function DesktopMarketplace({
   onStatusChange,
   priceRange,
   onPriceRangeChange,
+  activeSection,
+  onSectionChange,
   userOwnedArtIds,
+  userHoldings,
   userName,
   walletBalance,
   initials,
 }: {
   artworks: Art[];
+  allArtworks: Art[];
   searchQuery: string;
   onSearchChange: (value: string) => void;
   selectedCategory: string | null;
@@ -323,7 +336,10 @@ function DesktopMarketplace({
   onStatusChange: (value: string | null) => void;
   priceRange: { min: number; max: number };
   onPriceRangeChange: (value: { min: number; max: number }) => void;
+  activeSection: DashboardSection;
+  onSectionChange: (section: DashboardSection) => void;
   userOwnedArtIds: Set<string>;
+  userHoldings: UserHolding[];
   userName: string;
   walletBalance: number;
   initials: string;
@@ -333,6 +349,33 @@ function DesktopMarketplace({
   const statuses = ["For sale", "Swap only", "Any"];
   const featured = artworks[0] || ARTWORKS[0];
   const totalValue = artworks.reduce((sum, art) => sum + art.price, 0);
+  const visibleArtworks = activeSection === "collections" ? allArtworks : artworks;
+  const portfolioItems = userHoldings
+    .filter((holding) => holding.status === "owned" || holding.status === "listed")
+    .map((holding) => ({
+      holding,
+      art: allArtworks.find((art) => art.id === holding.artId),
+    }))
+    .filter((item): item is { holding: UserHolding; art: Art } => Boolean(item.art));
+  const artists = Array.from(
+    allArtworks.reduce((map, art) => {
+      const current = map.get(art.artist) ?? {
+        name: art.artist,
+        city: art.city,
+        categories: new Set<string>(),
+        value: 0,
+        works: [] as Art[],
+      };
+      current.categories.add(art.category);
+      current.value += art.price;
+      current.works.push(art);
+      map.set(art.artist, current);
+      return map;
+    }, new Map<string, { name: string; city: string; categories: Set<string>; value: number; works: Art[] }>()).values()
+  ).map((artist) => ({
+    ...artist,
+    categories: Array.from(artist.categories),
+  }));
 
   return (
     <div className="min-h-screen bg-[#f6f8ff] text-slate-950">
@@ -346,27 +389,39 @@ function DesktopMarketplace({
           </Link>
           <nav className="mt-10 space-y-1 text-sm">
             {[
-              { label: "Home", icon: HomeIcon, to: "/", active: false },
-              { label: "Explore", icon: Search, to: "/explore", active: true },
-              { label: "Collections", icon: PackageCheck, to: "/explore", active: false },
-              { label: "My Portfolio", icon: Wallet, to: "/profile", active: false },
-              { label: "Activity", icon: Activity, to: "/profile", active: false },
-              { label: "Artists", icon: UserRound, to: "/artist/emeka-osei", active: false },
-              { label: "Offers", icon: Send, to: "/offer", active: false },
-              { label: "Certificates", icon: BadgeCheck, to: "/profile", active: false },
+              { label: "Home", icon: HomeIcon, to: "/" },
+              { label: "Explore", icon: Search, section: "explore" },
+              { label: "Collections", icon: PackageCheck, section: "collections" },
+              { label: "My Portfolio", icon: Wallet, section: "portfolio" },
+              { label: "Activity", icon: Activity, section: "portfolio" },
+              { label: "Artists", icon: UserRound, section: "artists" },
+              { label: "Offers", icon: Send, to: "/offer" },
+              { label: "Certificates", icon: BadgeCheck, section: "portfolio" },
             ].map((item) => (
+              "to" in item ? (
               <Link
                 key={item.label}
-                to={item.to}
-                className={`flex items-center gap-3 rounded-2xl px-4 py-3 transition ${
-                  item.active
+                to={item.to as string}
+                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+              ) : (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => onSectionChange(item.section as DashboardSection)}
+                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${
+                  activeSection === item.section
                     ? "bg-primary/10 font-semibold text-primary"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
                 }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
-              </Link>
+              </button>
+              )
             ))}
           </nav>
           <div className="mt-8 border-t border-slate-100 pt-6">
@@ -433,20 +488,35 @@ function DesktopMarketplace({
             </Link>
           </header>
 
-          <div className="mx-auto mt-8 grid max-w-[1500px] grid-cols-[minmax(0,1fr)_340px] gap-7">
+          <div
+            className={`mx-auto mt-8 grid max-w-[1500px] gap-7 ${
+              activeSection === "explore" || activeSection === "collections"
+                ? "grid-cols-[minmax(0,1fr)_340px]"
+                : "grid-cols-1"
+            }`}
+          >
             <section className="space-y-6">
+              {activeSection === "portfolio" ? (
+                <PortfolioDashboard items={portfolioItems} walletBalance={walletBalance} userName={userName} initials={initials} />
+              ) : activeSection === "artists" ? (
+                <ArtistDashboard artists={artists} />
+              ) : (
+                <>
               <div className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(120deg,#d9edff,#f1ddff_54%,#ffe1ed)] p-8 shadow-sm">
                 <div className="grid grid-cols-[1fr_320px] items-center gap-8">
                   <div>
                     <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-semibold text-primary">
-                      <ShieldCheck className="h-4 w-4" /> Marketplace with proof
+                      <ShieldCheck className="h-4 w-4" /> {activeSection === "collections" ? "Complete collection" : "Marketplace with proof"}
                     </div>
                     <h1 className="mt-6 font-display text-5xl font-black leading-tight">
-                      Buy, offer, and swap physical art with onchain history.
+                      {activeSection === "collections"
+                        ? "All verified art, collected in one dashboard."
+                        : "Buy, offer, and swap physical art with onchain history."}
                     </h1>
                     <p className="mt-4 max-w-2xl text-base leading-7 text-slate-700">
-                      Browse verified works with unique IDs, certificates, ownership records,
-                      exhibition history, restoration notes, and valuation signals.
+                      {activeSection === "collections"
+                        ? "Browse the full ArtChain catalogue without leaving the desktop dashboard."
+                        : "Browse verified works with unique IDs, certificates, ownership records, exhibition history, restoration notes, and valuation signals."}
                     </p>
                   </div>
                   <img
@@ -462,9 +532,11 @@ function DesktopMarketplace({
               <div className="rounded-[28px] bg-white p-5 shadow-sm">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
-                    <h2 className="font-display text-xl font-semibold">Marketplace</h2>
+                    <h2 className="font-display text-xl font-semibold">
+                      {activeSection === "collections" ? "All art" : "Marketplace"}
+                    </h2>
                     <div className="text-sm text-slate-500">
-                      {artworks.length} verified result{artworks.length === 1 ? "" : "s"}
+                      {visibleArtworks.length} verified result{visibleArtworks.length === 1 ? "" : "s"}
                     </div>
                   </div>
                   <button className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold">
@@ -472,9 +544,9 @@ function DesktopMarketplace({
                   </button>
                 </div>
 
-                {artworks.length > 0 ? (
+                {visibleArtworks.length > 0 ? (
                   <div className="grid grid-cols-4 gap-5">
-                    {artworks.map((art) => {
+                    {visibleArtworks.map((art) => {
                       const isOwned = userOwnedArtIds.has(art.id);
                       return (
                         <article
@@ -538,8 +610,11 @@ function DesktopMarketplace({
                   </div>
                 )}
               </div>
+                </>
+              )}
             </section>
 
+            {(activeSection === "explore" || activeSection === "collections") && (
             <aside className="space-y-5">
               <div className="rounded-[28px] bg-white p-6 shadow-sm">
                 <h2 className="font-display text-lg font-semibold">Filter Artwork</h2>
@@ -596,10 +671,165 @@ function DesktopMarketplace({
                 </div>
               </div>
             </aside>
+            )}
           </div>
         </main>
       </div>
     </div>
+  );
+}
+
+function PortfolioDashboard({
+  items,
+  walletBalance,
+  userName,
+  initials,
+}: {
+  items: { holding: UserHolding; art: Art }[];
+  walletBalance: number;
+  userName: string;
+  initials: string;
+}) {
+  const artValue = items.reduce((sum, item) => sum + item.art.price, 0);
+  const listedCount = items.filter((item) => item.holding.status === "listed").length;
+
+  return (
+    <>
+      <div className="rounded-[28px] bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <div className="text-sm font-semibold text-primary">My Portfolio</div>
+            <h1 className="mt-2 font-display text-4xl font-black">Your wallet and artwork, inside the dashboard.</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              Track owned works, listed pieces, and portfolio value without leaving the desktop workspace.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+              {initials}
+            </div>
+            <div>
+              <div className="text-sm font-semibold">{userName}</div>
+              <div className="text-xs text-slate-500">Collector portfolio</div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-6 grid grid-cols-3 gap-4">
+          {[
+            ["Wallet balance", `${walletBalance.toLocaleString()} AC`],
+            ["Artwork value", fmt(artValue)],
+            ["Listed works", listedCount.toLocaleString()],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">{label}</div>
+              <div className="mt-1 text-2xl font-bold">{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-[28px] bg-white p-5 shadow-sm">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Owned artwork</h2>
+            <div className="text-sm text-slate-500">{items.length} portfolio item{items.length === 1 ? "" : "s"}</div>
+          </div>
+        </div>
+        {items.length > 0 ? (
+          <div className="grid grid-cols-4 gap-5">
+            {items.map(({ holding, art }) => (
+              <article key={holding.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <Link to={`/art/${art.id}`} className="block h-52 overflow-hidden">
+                  <img src={art.image} alt={art.name} className="h-full w-full object-cover" />
+                </Link>
+                <div className="p-4">
+                  <Link to={`/art/${art.id}`} className="block truncate text-sm font-semibold hover:text-primary">
+                    {art.name}
+                  </Link>
+                  <div className="mt-1 truncate text-xs text-slate-500">{art.artist} - {art.city}</div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="font-semibold">{fmt(art.price)}</span>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
+                      {holding.status}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="grid min-h-[260px] place-items-center rounded-2xl bg-slate-50 text-center">
+            <div>
+              <Wallet className="mx-auto h-9 w-9 text-slate-400" />
+              <div className="mt-3 text-sm font-semibold">No portfolio artwork yet</div>
+              <div className="mt-1 text-sm text-slate-500">Purchases and listings will appear here.</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ArtistDashboard({
+  artists,
+}: {
+  artists: { name: string; city: string; categories: string[]; value: number; works: Art[] }[];
+}) {
+  return (
+    <>
+      <div className="rounded-[28px] bg-white p-6 shadow-sm">
+        <div className="text-sm font-semibold text-primary">Artists</div>
+        <h1 className="mt-2 font-display text-4xl font-black">Artist profiles in the dashboard.</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+          Browse artists as a grid, preview their work, and stay in the desktop dashboard.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-4 gap-5">
+        {artists.map((artist) => {
+          const hero = artist.works[0];
+          return (
+            <article key={artist.name} className="overflow-hidden rounded-[24px] bg-white shadow-sm">
+              <div className="grid h-48 grid-cols-2 gap-1 bg-slate-100">
+                {artist.works.slice(0, 4).map((art) => (
+                  <img key={art.id} src={art.image} alt={art.name} className="h-full w-full object-cover" />
+                ))}
+              </div>
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-display text-lg font-semibold">{artist.name}</h2>
+                    <div className="mt-1 text-xs text-slate-500">{artist.city}</div>
+                  </div>
+                  <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                    {artist.works.length}
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {artist.categories.map((category) => (
+                    <span key={category} className="rounded-full border border-slate-200 px-2 py-1 text-[10px] text-slate-600">
+                      {category}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                  <div>
+                    <div className="text-[10px] text-slate-500">Market value</div>
+                    <div className="text-sm font-semibold">{fmt(artist.value)}</div>
+                  </div>
+                  {hero && (
+                    <Link to={`/art/${hero.id}`} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white">
+                      View work
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </>
   );
 }
 

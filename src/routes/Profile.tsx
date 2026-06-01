@@ -1,6 +1,6 @@
 import { AppFrame } from "@/components/AppFrame";
 import { getAllArtworks, fmt } from "@/lib/art-data";
-import { ArrowDownToLine, ArrowUpFromLine, BadgeCheck, Calendar, LogIn, Palette, Repeat2, Plus, TrendingUp } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BadgeCheck, Calendar, LogIn, Palette, Repeat2, Plus, TrendingUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -123,6 +123,13 @@ export default function Profile() {
   return (
     <AppFrame label="Profile · Wallet">
       <div className="px-5 pt-3 pb-6">
+        <div className="mb-4 flex items-center gap-3">
+          <Link to="/explore" className="grid h-9 w-9 place-items-center rounded-full border border-border bg-card">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div className="text-sm font-semibold">Back to dashboard</div>
+        </div>
+
         <div className="flex items-end gap-3 px-1">
           <button
             onClick={() => {

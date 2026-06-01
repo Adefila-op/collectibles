@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { PhoneShell } from "./PhoneShell";
 import { BottomNav } from "./BottomNav";
 import heroCharacter from "@/assets/hero-character.png";
-import { Instagram, Menu, ShieldCheck, Twitter, Wallet } from "lucide-react";
+import { Instagram, Menu, ShieldCheck, Twitter } from "lucide-react";
 
 export function AppFrame({
   children,
@@ -76,13 +76,6 @@ export function AppFrame({
                 Collect Art
                 <span className="block text-cyan-200">with proof.</span>
               </h1>
-              <a
-                href="/profile"
-                className="mt-8 inline-flex items-center gap-2 rounded-full border-2 border-white bg-white px-5 py-2.5 text-xs font-black text-primary shadow-soft transition hover:bg-cyan-100"
-              >
-                <Wallet className="h-4 w-4" /> Connect Wallet
-              </a>
-
               <div className="mt-16 text-center font-display text-lg font-black leading-tight text-white">
                 <div>Say "5/10000"</div>
                 <div>Proofed</div>
