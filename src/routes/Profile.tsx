@@ -259,10 +259,10 @@ export default function Profile() {
                 {userArts.map(({ art, holding }, i) => (
                   <div
                     key={holding.id}
-                    className="rounded-2xl border border-border bg-card p-3 shadow-card animate-fade-up"
+                    className="rounded-2xl border border-border bg-card p-3 shadow-card animate-fade-up hover:border-primary/40 hover:bg-card/80 transition"
                     style={{ animationDelay: `${i * 80}ms` }}
                   >
-                    <div className="flex items-start gap-3">
+                    <Link to={`/art/${art!.id}`} className="flex items-start gap-3">
                       <img src={art!.image} alt={art!.name} className="h-16 w-16 rounded-xl object-cover flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-semibold">{art!.name}</div>
@@ -272,7 +272,7 @@ export default function Profile() {
                           ● {holding.status}
                         </div>
                       </div>
-                    </div>
+                    </Link>
                     
                     {holding.status === 'owned' && (
                       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -285,6 +285,7 @@ export default function Profile() {
                           </Link>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => setArtistOpen(true)}
                             className="rounded-lg bg-primary/10 py-2 text-center text-[10px] font-semibold text-primary transition flex items-center justify-center gap-1"
                           >
@@ -302,7 +303,7 @@ export default function Profile() {
 
                     {holding.status === 'listed' && (
                       <div className="mt-3">
-                        <button className="w-full rounded-lg bg-amber-500/10 hover:bg-amber-500/20 py-2 text-center text-[10px] font-semibold text-amber-600 transition flex items-center justify-center gap-1">
+                        <button type="button" className="w-full rounded-lg bg-amber-500/10 hover:bg-amber-500/20 py-2 text-center text-[10px] font-semibold text-amber-600 transition flex items-center justify-center gap-1">
                           <TrendingUp className="h-3 w-3" /> Listed for sale
                         </button>
                       </div>

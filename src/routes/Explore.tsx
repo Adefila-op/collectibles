@@ -38,6 +38,9 @@ import {
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings, type UserHolding } from "@/lib/db";
+import { BuyArtModal } from "@/components/modals/BuyArtModal";
+import { OfferModal } from "@/components/modals/OfferModal";
+import { SwapModal } from "@/components/modals/SwapModal";
 
 type DashboardSection = "explore" | "portfolio" | "artists";
 const dashboardSections: DashboardSection[] = ["explore", "portfolio", "artists"];
@@ -65,6 +68,11 @@ export default function Explore() {
   const [activeSection, setActiveSection] = useState<DashboardSection>(
     dashboardSections.includes(initialSection as DashboardSection) ? (initialSection as DashboardSection) : "explore"
   );
+
+  const [buyModalOpen, setBuyModalOpen] = useState(false);
+  const [offerModalOpen, setOfferModalOpen] = useState(false);
+  const [offerArtId, setOfferArtId] = useState<string>();
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
 
   const allArtworks = useMemo(() => getAllArtworks(), []);
   const userHoldings = user ? getHoldings(user.id) : [];
@@ -261,26 +269,29 @@ export default function Explore() {
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/50 backdrop-blur-sm pointer-events-none">
                       <div className="flex gap-2 flex-wrap justify-center pointer-events-auto">
                         {isOwned ? (
-                          <Link
-                            to="/swap"
+                          <button
+                            onClick={() => setSwapModalOpen(true)}
                             className="flex items-center gap-1 rounded-full bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 text-xs text-white font-semibold transition"
                           >
                             <Repeat2 className="h-3.5 w-3.5" /> Swap
-                          </Link>
+                          </button>
                         ) : (
-                          <Link
-                            to={`/offer?artId=${a.id}`}
+                          <button
+                            onClick={() => {
+                              setOfferArtId(a.id);
+                              setOfferModalOpen(true);
+                            }}
                             className="flex items-center gap-1 rounded-full bg-primary hover:bg-primary/90 px-3 py-1.5 text-xs text-white font-semibold transition"
                           >
                             <Send className="h-3.5 w-3.5" /> Offer
-                          </Link>
+                          </button>
                         )}
-                        <Link
-                          to="/buy"
+                        <button
+                          onClick={() => setBuyModalOpen(true)}
                           className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs text-white font-semibold transition hover:bg-primary/90"
                         >
                           <ShoppingCart className="h-3.5 w-3.5" /> Buy
-                        </Link>
+                        </button>
                       </div>
                     </div>
                     <div className="p-2.5">
@@ -334,6 +345,11 @@ export default function Explore() {
             <p className="text-sm text-muted-foreground">No results found</p>
           </div>
         )}
+
+        {/* Modals */}
+        <BuyArtModal open={buyModalOpen} onOpenChange={setBuyModalOpen} />
+        <OfferModal open={offerModalOpen} onOpenChange={setOfferModalOpen} artId={offerArtId} />
+        <SwapModal open={swapModalOpen} onOpenChange={setSwapModalOpen} />
       </div>
     </AppFrame>
   );
