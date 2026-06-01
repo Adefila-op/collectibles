@@ -1,0 +1,10 @@
+{
+  "name": "artchain-africa",
+  "version": "1.0.0",
+  "description": "Full-stack collectible art trading platform",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
+}
