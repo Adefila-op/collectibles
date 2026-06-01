@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
+import { BrandLogo } from "@/components/BrandLogo";
+import logo from "@/assets/collectible-logo.png";
 import {
   Dialog,
   DialogContent,
@@ -437,12 +439,7 @@ function DesktopMarketplace({
     <div className="min-h-screen bg-[#f6f8ff] text-slate-950">
       <div className="grid min-h-screen grid-cols-[260px_minmax(0,1fr)]">
         <aside className="sticky top-0 flex h-screen flex-col border-r border-slate-200/80 bg-white/90 px-6 py-8 backdrop-blur">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary-grad text-white shadow-soft">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <span className="font-display text-xl font-black">COllectible</span>
-          </Link>
+          <BrandLogo />
           <nav className="mt-10 space-y-1 text-sm">
             {[
               { label: "Home", icon: HomeIcon, to: "/" },
@@ -533,15 +530,17 @@ function DesktopMarketplace({
                 className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
               />
             </div>
-            <button className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm">
-              <Bell className="h-5 w-5" />
-            </button>
-            <Link
-              to="/list"
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary-grad px-6 py-3 text-sm font-semibold text-white shadow-glow"
-            >
-              List Your Art <Plus className="h-4 w-4" />
-            </Link>
+            <div className="ml-auto flex items-center gap-5">
+              <button className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm">
+                <Bell className="h-5 w-5" />
+              </button>
+              <Link
+                to="/list"
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary-grad px-6 py-3 text-sm font-semibold text-white shadow-glow"
+              >
+                List Your Art <Plus className="h-4 w-4" />
+              </Link>
+            </div>
           </header>
 
           <div
@@ -916,7 +915,7 @@ function PortfolioDashboard({
           <div className="rounded-[28px] bg-white p-5 shadow-sm">
             <div className="relative mx-auto mb-3 grid h-32 w-44 place-items-end overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#0b6fff,#19c6ff)]">
               <div className="absolute inset-x-5 top-4 flex items-center justify-between text-xs font-semibold text-white/85">
-                <span>COllectible</span>
+                <img src={logo} alt="" className="h-6 w-6 rounded-md object-cover" />
                 <ShieldCheck className="h-4 w-4" />
               </div>
               <img

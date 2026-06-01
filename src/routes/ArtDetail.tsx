@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/AppFrame";
+import { BrandLogo } from "@/components/BrandLogo";
 import { getAllArtworks, getArt, fmt, type Art } from "@/lib/art-data";
 import { OFFERS } from "@/lib/offers-data";
 import {
@@ -65,12 +66,7 @@ function HistorySection({
 function DesktopSidebar() {
   return (
     <aside className="sticky top-0 flex h-screen flex-col border-r border-slate-200/80 bg-white/90 px-6 py-8 backdrop-blur">
-      <Link to="/" className="flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary-grad text-white shadow-soft">
-          <ShieldCheck className="h-5 w-5" />
-        </div>
-        <span className="font-display text-xl font-black">COllectible</span>
-      </Link>
+      <BrandLogo />
       <nav className="mt-10 space-y-1 text-sm">
         {[
           { label: "Home", icon: HomeIcon, to: "/" },

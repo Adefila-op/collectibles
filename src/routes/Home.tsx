@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
+import { BrandLogo } from "@/components/BrandLogo";
 import { getAllArtworks, fmt } from "@/lib/art-data";
 import {
   Repeat2,
@@ -166,9 +167,7 @@ function DesktopLanding() {
         <div className="absolute right-[200px] top-[60px] h-[100px] w-[100px] rounded-full bg-white/[0.06]" />
 
         <nav className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-10 py-6">
-          <Link to="/" className="text-[15px] font-medium tracking-normal text-white">
-            COllectible
-          </Link>
+          <BrandLogo light markClassName="h-9 w-9" textClassName="text-[15px] font-semibold" />
           <div className="flex items-center gap-7">
             <Link to="/explore" className="text-[13px] text-white/65 transition hover:text-white">
               How it works
