@@ -7,8 +7,10 @@ import {
   BadgeCheck,
   Bell,
   Bookmark,
+  CalendarDays,
   Heart,
   Home as HomeIcon,
+  MapPin,
   MessageCircle,
   PackageCheck,
   Plus,
@@ -19,6 +21,8 @@ import {
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
+  Sparkles,
+  TrendingUp,
   UserRound,
   Wallet,
 } from "lucide-react";
@@ -27,20 +31,30 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings, type UserHolding } from "@/lib/db";
 
 type DashboardSection = "explore" | "collections" | "portfolio" | "artists";
+const dashboardSections: DashboardSection[] = ["explore", "collections", "portfolio", "artists"];
 
 export default function Explore() {
   const { user } = useAuth();
+  const initialSection = new URLSearchParams(window.location.search).get("section");
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [priceRange, setPriceRange] = useState({ min: 50000, max: 2000000 });
-  const [activeSection, setActiveSection] = useState<DashboardSection>("explore");
+  const [activeSection, setActiveSection] = useState<DashboardSection>(
+    dashboardSections.includes(initialSection as DashboardSection) ? (initialSection as DashboardSection) : "explore"
+  );
 
   const allArtworks = useMemo(() => getAllArtworks(), []);
   const userHoldings = user ? getHoldings(user.id) : [];
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
+
+  function handleSectionChange(section: DashboardSection) {
+    setActiveSection(section);
+    const nextUrl = section === "explore" ? "/explore" : `/explore?section=${section}`;
+    window.history.replaceState(null, "", nextUrl);
+  }
 
   const filteredArtworks = useMemo(() => {
     let results = allArtworks;
@@ -97,7 +111,7 @@ export default function Explore() {
           priceRange={priceRange}
           onPriceRangeChange={setPriceRange}
           activeSection={activeSection}
-          onSectionChange={setActiveSection}
+          onSectionChange={handleSectionChange}
           userOwnedArtIds={userOwnedArtIds}
           userHoldings={userHoldings}
           userName={user?.name || "Kwame Mensah"}
@@ -776,60 +790,209 @@ function ArtistDashboard({
 }: {
   artists: { name: string; city: string; categories: string[]; value: number; works: Art[] }[];
 }) {
+  const trendingArtists = artists
+    .map((artist, index) => ({
+      ...artist,
+      growth: [24, 19, 16, 14, 11, 9][index % 6],
+      collectors: [820, 690, 540, 430, 390, 310][index % 6],
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+
+  const profitableCollections = artists
+    .flatMap((artist, artistIndex) =>
+      artist.works.map((art, artIndex) => {
+        const priceSurge = 12 + ((artistIndex + artIndex) % 5) * 7;
+        const resellSurge = 8 + ((artistIndex * 2 + artIndex) % 4) * 6;
+        return {
+          art,
+          artist,
+          priceSurge,
+          resellSurge,
+          change: Math.round(art.price * (priceSurge / 100)),
+        };
+      })
+    )
+    .sort((a, b) => b.priceSurge + b.resellSurge - (a.priceSurge + a.resellSurge))
+    .slice(0, 4);
+
+  const events = [
+    { title: "Lagos Gallery Night", venue: "Victoria Island", time: "Fri, 7:30 PM", tag: "Open viewing" },
+    { title: "Accra Modern Fair", venue: "Osu Arts District", time: "Sat, 12:00 PM", tag: "Collector preview" },
+    { title: "Ibadan Studio Walk", venue: "Dugbe Quarter", time: "Sun, 4:00 PM", tag: "Artist talks" },
+  ];
+
+  const opportunities = [
+    { title: "Early collector allocation", detail: "Priority offers on verified Lagos painting drops." },
+    { title: "Resale fee holiday", detail: "Reduced marketplace fee on selected sculpture listings." },
+  ];
+
   return (
-    <>
-      <div className="rounded-[28px] bg-white p-6 shadow-sm">
-        <div className="text-sm font-semibold text-primary">Artists</div>
-        <h1 className="mt-2 font-display text-4xl font-black">Artist profiles in the dashboard.</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-          Browse artists as a grid, preview their work, and stay in the desktop dashboard.
-        </p>
+    <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="space-y-6">
+        <section className="rounded-[28px] bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-primary">Streaming now</div>
+              <h1 className="mt-2 font-display text-4xl font-black">Artist market dashboard.</h1>
+            </div>
+            <Link to="/explore" className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">
+              Explore art <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="mt-6 flex items-center gap-3">
+            {trendingArtists.map((artist) => {
+              const hero = artist.works[0];
+              return (
+                <Link
+                  key={artist.name}
+                  to={hero ? `/art/${hero.id}` : "/explore"}
+                  className="group relative grid h-14 w-14 place-items-center rounded-full border-2 border-white bg-slate-100 shadow-sm ring-2 ring-primary/20"
+                  title={artist.name}
+                >
+                  {hero ? (
+                    <img src={hero.image} alt={artist.name} className="h-full w-full rounded-full object-cover" />
+                  ) : (
+                    <UserRound className="h-5 w-5 text-slate-500" />
+                  )}
+                  <span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">
+                    {artist.works.length}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-xl font-semibold">Popular this week</h2>
+              <div className="text-sm text-slate-500">Trending artists with rising collector attention</div>
+            </div>
+            <Sparkles className="h-5 w-5 text-primary" />
+          </div>
+          <div className="grid grid-cols-2 gap-5">
+            {trendingArtists.slice(0, 2).map((artist) => {
+              const hero = artist.works[0];
+              return (
+                <Link
+                  key={artist.name}
+                  to={hero ? `/art/${hero.id}` : "/explore"}
+                  className="group relative min-h-[320px] overflow-hidden rounded-[28px] bg-slate-900 shadow-sm"
+                >
+                  {hero && (
+                    <img
+                      src={hero.image}
+                      alt={hero.name}
+                      className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/88 via-slate-950/25 to-transparent" />
+                  <div className="absolute left-5 top-5 rounded-2xl bg-white/92 px-3 py-2 text-xs font-semibold text-primary shadow-sm">
+                    +{artist.growth}% interest
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 p-6 text-white">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-white/75">
+                      <MapPin className="h-3.5 w-3.5" /> {artist.city}
+                    </div>
+                    <h3 className="mt-2 font-display text-2xl font-black">{artist.name}</h3>
+                    <p className="mt-2 max-w-sm text-sm leading-6 text-white/80">
+                      {artist.categories.join(", ")} artist with {artist.collectors} weekly collector views.
+                    </p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-[28px] bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-xl font-semibold">Profitable collections</h2>
+              <div className="text-sm text-slate-500">Art with price surge, resale surge, and value change</div>
+            </div>
+            <TrendingUp className="h-5 w-5 text-emerald-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {profitableCollections.map(({ art, artist, priceSurge, resellSurge, change }) => (
+              <Link
+                key={art.id}
+                to={`/art/${art.id}`}
+                className="flex items-center gap-4 rounded-2xl bg-slate-50 p-3 transition hover:bg-slate-100"
+              >
+                <img src={art.image} alt={art.name} className="h-16 w-16 rounded-2xl object-cover" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{art.name}</div>
+                  <div className="mt-1 truncate text-xs text-slate-500">{artist.name} - {art.category}</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold">
+                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">+{priceSurge}% price</span>
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">+{resellSurge}% resale</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold">{fmt(art.price)}</div>
+                  <div className="text-xs font-semibold text-emerald-600">+{fmt(change)}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
       </div>
 
-      <div className="grid grid-cols-4 gap-5">
-        {artists.map((artist) => {
-          const hero = artist.works[0];
-          return (
-            <article key={artist.name} className="overflow-hidden rounded-[24px] bg-white shadow-sm">
-              <div className="grid h-48 grid-cols-2 gap-1 bg-slate-100">
-                {artist.works.slice(0, 4).map((art) => (
-                  <img key={art.id} src={art.image} alt={art.name} className="h-full w-full object-cover" />
-                ))}
-              </div>
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-display text-lg font-semibold">{artist.name}</h2>
-                    <div className="mt-1 text-xs text-slate-500">{artist.city}</div>
-                  </div>
-                  <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                    {artist.works.length}
-                  </div>
+      <aside className="space-y-6">
+        <section className="rounded-[28px] bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-lg font-semibold">Upcoming art events</h2>
+              <div className="text-xs text-slate-500">Across town this week</div>
+            </div>
+            <CalendarDays className="h-5 w-5 text-primary" />
+          </div>
+          <div className="space-y-3">
+            {events.map((event) => (
+              <div key={event.title} className="rounded-2xl bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold">{event.title}</h3>
+                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-primary">{event.tag}</span>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {artist.categories.map((category) => (
-                    <span key={category} className="rounded-full border border-slate-200 px-2 py-1 text-[10px] text-slate-600">
-                      {category}
-                    </span>
-                  ))}
+                <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                  <MapPin className="h-3.5 w-3.5" /> {event.venue}
                 </div>
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                  <div>
-                    <div className="text-[10px] text-slate-500">Market value</div>
-                    <div className="text-sm font-semibold">{fmt(artist.value)}</div>
-                  </div>
-                  {hero && (
-                    <Link to={`/art/${hero.id}`} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white">
-                      View work
-                    </Link>
-                  )}
+                <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <CalendarDays className="h-3.5 w-3.5" /> {event.time}
                 </div>
               </div>
-            </article>
-          );
-        })}
-      </div>
-    </>
+            ))}
+          </div>
+        </section>
+
+        <section className="overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#e7fbff,#eef0ff_52%,#fff1f4)] p-6 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <Sparkles className="h-4 w-4" /> Special offers and opportunity
+          </div>
+          <h2 className="mt-3 font-display text-2xl font-black">Collector advantage week</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Access selected artist drops, reduced resale fees, and curated city events from one dashboard.
+          </p>
+          <div className="mt-5 space-y-3">
+            {opportunities.map((item) => (
+              <div key={item.title} className="rounded-2xl bg-white/75 p-4">
+                <div className="text-sm font-semibold">{item.title}</div>
+                <div className="mt-1 text-xs leading-5 text-slate-600">{item.detail}</div>
+              </div>
+            ))}
+          </div>
+          <Link
+            to="/offer"
+            className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-glow"
+          >
+            View opportunities <ArrowRight className="h-4 w-4" />
+          </Link>
+        </section>
+      </aside>
+    </div>
   );
 }
 
