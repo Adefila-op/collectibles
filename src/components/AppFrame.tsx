@@ -15,7 +15,8 @@ export function AppFrame({
 }) {
   if (desktop) {
     return (
-      <div className="min-h-screen bg-background text-foreground">
+      <div className="min-h-screen bg-background text-foreground lg:bg-[#0759e8]">
+        {/* Mobile view */}
         <div className="lg:hidden">
           <PhoneShell label={label}>
             <div className="flex min-h-dvh flex-col">
@@ -24,6 +25,7 @@ export function AppFrame({
             </div>
           </PhoneShell>
         </div>
+        {/* Desktop view - custom layout */}
         <div className="hidden min-h-screen lg:block">{desktop}</div>
       </div>
     );
@@ -31,6 +33,7 @@ export function AppFrame({
 
   return (
     <div className="min-h-screen bg-background text-foreground lg:bg-[#0759e8]">
+      {/* Mobile view */}
       <div className="lg:hidden">
         <PhoneShell label={label}>
           <div className="flex min-h-dvh flex-col">
@@ -40,6 +43,7 @@ export function AppFrame({
         </PhoneShell>
       </div>
 
+      {/* Desktop view - default sidebar layout */}
       <div className="hidden min-h-screen grid-cols-[320px_minmax(0,1fr)] lg:grid">
         <aside className="relative min-h-screen overflow-hidden bg-[#0b6fff] p-8 text-white shadow-[0_30px_90px_rgba(0,24,95,0.35)]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(255,255,255,0.26),transparent_15%),radial-gradient(circle_at_78%_24%,rgba(110,193,255,0.35),transparent_20%),linear-gradient(135deg,#0f7cff,#064fd1)]" />
