@@ -165,7 +165,7 @@ function DesktopLanding() {
         <div className="absolute -left-10 bottom-5 h-[180px] w-[180px] rounded-full bg-white/[0.06]" />
         <div className="absolute right-[200px] top-[60px] h-[100px] w-[100px] rounded-full bg-white/[0.06]" />
 
-        <nav className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-8 py-5">
+        <nav className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-10 py-6">
           <Link to="/" className="text-[15px] font-medium tracking-normal text-white">
             Collectible
           </Link>
@@ -185,21 +185,21 @@ function DesktopLanding() {
           </div>
         </nav>
 
-        <div className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-2 items-center gap-8 px-8 py-12">
+        <div className="relative z-10 mx-auto grid w-full max-w-7xl flex-1 grid-cols-2 items-center gap-10 px-10 py-12">
           <div>
-            <h1 className="mb-5 font-sans text-[42px] font-bold leading-[1.1] tracking-normal text-white">
+            <h1 className="mb-6 font-sans text-[56px] font-bold leading-[1.04] tracking-normal text-white">
               Buy resellable
               <br />
               artworks <span className="text-[#8cbeff]">directly</span>
               <br />
               from artists
             </h1>
-            <p className="mb-2 text-sm leading-[1.65] text-white/65">
+            <p className="mb-2 text-base leading-[1.65] text-white/65">
               Verified provenance. Transparent ownership.
               <br />
               Stronger resale value.
             </p>
-            <p className="mb-8 text-[13px] leading-[1.65] text-white/40">
+            <p className="mb-10 max-w-xl text-[15px] leading-[1.65] text-white/40">
               Collectible is the provenance infrastructure for overlooked art markets, starting with Africa.
             </p>
             <div className="flex items-center gap-3">
@@ -219,7 +219,7 @@ function DesktopLanding() {
           </div>
 
           <div className="flex items-end justify-center">
-            <svg width="220" height="230" viewBox="0 0 220 230" role="img" aria-labelledby="landing-art-title landing-art-desc">
+            <svg width="320" height="335" viewBox="0 0 220 230" role="img" aria-labelledby="landing-art-title landing-art-desc">
               <title id="landing-art-title">Floating artwork frame with provenance certificate</title>
               <desc id="landing-art-desc">An animated 3D-style artwork frame floating against the blue background</desc>
 
@@ -259,7 +259,7 @@ function DesktopLanding() {
         </div>
 
         <div className="relative z-10 border-t border-white/10">
-          <div className="mx-auto flex w-full max-w-6xl">
+          <div className="mx-auto flex w-full max-w-7xl">
             {[
               ["2,400+", "Artworks"],
               ["180+", "Artists"],
