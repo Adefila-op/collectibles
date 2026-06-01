@@ -158,14 +158,14 @@ export default function Home() {
 
 function DesktopLanding() {
   return (
-    <div className="min-h-screen bg-white p-8 text-white">
+    <div className="min-h-screen bg-[#1a43d4] text-white">
       <h2 className="sr-only">Collectible landing page - buy resellable artworks directly from artists</h2>
-      <section className="relative mx-auto min-h-[480px] max-w-6xl overflow-hidden rounded-2xl bg-[#1a43d4] font-sans">
+      <section className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#1a43d4] font-sans">
         <div className="absolute -right-[60px] -top-20 h-[300px] w-[300px] rounded-full bg-white/[0.06]" />
         <div className="absolute -left-10 bottom-5 h-[180px] w-[180px] rounded-full bg-white/[0.06]" />
         <div className="absolute right-[200px] top-[60px] h-[100px] w-[100px] rounded-full bg-white/[0.06]" />
 
-        <nav className="relative z-10 flex items-center justify-between px-8 py-5">
+        <nav className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-8 py-5">
           <Link to="/" className="text-[15px] font-medium tracking-normal text-white">
             Collectible
           </Link>
@@ -185,7 +185,7 @@ function DesktopLanding() {
           </div>
         </nav>
 
-        <div className="relative z-10 grid grid-cols-2 items-center gap-8 px-8 pb-12 pt-10">
+        <div className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-2 items-center gap-8 px-8 py-12">
           <div>
             <h1 className="mb-5 font-sans text-[42px] font-bold leading-[1.1] tracking-normal text-white">
               Buy resellable
@@ -258,18 +258,20 @@ function DesktopLanding() {
           </div>
         </div>
 
-        <div className="relative z-10 flex border-t border-white/10">
-          {[
-            ["2,400+", "Artworks"],
-            ["180+", "Artists"],
-            ["100%", "Verified"],
-            ["Africa-first", "Starting point"],
-          ].map(([value, label]) => (
-            <div key={label} className="flex-1 border-r border-white/10 px-8 py-[1.1rem] last:border-r-0">
-              <div className="mb-0.5 text-lg font-medium text-white">{value}</div>
-              <div className="text-[11px] uppercase tracking-[0.05em] text-white/40">{label}</div>
-            </div>
-          ))}
+        <div className="relative z-10 border-t border-white/10">
+          <div className="mx-auto flex w-full max-w-6xl">
+            {[
+              ["2,400+", "Artworks"],
+              ["180+", "Artists"],
+              ["100%", "Verified"],
+              ["Africa-first", "Starting point"],
+            ].map(([value, label]) => (
+              <div key={label} className="flex-1 border-r border-white/10 px-8 py-[1.1rem] last:border-r-0">
+                <div className="mb-0.5 text-lg font-medium text-white">{value}</div>
+                <div className="text-[11px] uppercase tracking-[0.05em] text-white/40">{label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </div>
