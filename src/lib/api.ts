@@ -177,5 +177,65 @@ export const adminAPI = {
     }),
 };
 
+// Wallet API
+export const walletAPI = {
+  /**
+   * Get wallet balance for a specific chain
+   */
+  getBalance: async (address: string, chain: 'base' | 'ethereum' | 'polygon' = 'base') => {
+    return apiCall(`/api/wallet/${address}/balance/${chain}`);
+  },
+
+  /**
+   * Get wallet balance from all supported chains
+   */
+  getBalanceAllChains: async (address: string) => {
+    return apiCall(`/api/wallet/${address}/balance`);
+  },
+
+  /**
+   * Get estimated gas fee for a transaction
+   */
+  getGasFee: async (chain: 'base' | 'ethereum' | 'polygon' = 'base') => {
+    return apiCall(`/api/wallet/gas-fee/${chain}`);
+  },
+
+  /**
+   * Create a top-up deposit request
+   */
+  createTopup: async (userId: string, amount: number, chain: string = 'base', paymentMethod: string = 'stripe') => {
+    return apiCall('/api/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify({ userId, amount, chain, paymentMethod }),
+    });
+  },
+
+  /**
+   * Confirm a top-up after payment
+   */
+  confirmTopup: async (transactionId: string) => {
+    return apiCall(`/api/wallet/topup/${transactionId}/confirm`, {
+      method: 'PATCH',
+    });
+  },
+
+  /**
+   * Get user's top-up history
+   */
+  getTopupHistory: async (userId: string) => {
+    return apiCall(`/api/wallet/topups/${userId}`);
+  },
+
+  /**
+   * Sync wallet balance with blockchain
+   */
+  syncBalance: async (userId: string, chain: string = 'base') => {
+    return apiCall(`/api/wallet/sync/${userId}`, {
+      method: 'POST',
+      body: JSON.stringify({ chain }),
+    });
+  },
+};
+
 // Health check
 export const healthCheck = () => apiCall('/api/health');

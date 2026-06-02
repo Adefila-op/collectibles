@@ -2,7 +2,14 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
 import { query, getClient } from './db.ts';
-import { generateDeterministicWallet } from './wallet.ts';
+import { 
+  generateDeterministicWallet, 
+  getWalletBalance,
+  getWalletBalanceFormatted,
+  getWalletBalancesAllChains,
+  estimateGasFee,
+  isValidWalletAddress
+} from './wallet.ts';
 
 dotenv.config({ path: '.env.local' });
 
@@ -366,6 +373,232 @@ app.post('/api/admin/events', async (req: Request, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: 'Failed to log admin event' });
+  }
+});
+
+// ========== WALLET API ==========
+
+// Get wallet balance from blockchain for specific chain
+app.get('/api/wallet/:address/balance/:chain', async (req: Request, res: Response) => {
+  try {
+    const { address, chain } = req.params;
+    
+    if (!isValidWalletAddress(address)) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    
+    if (!['base', 'ethereum', 'polygon'].includes(chain)) {
+      return res.status(400).json({ error: 'Invalid chain. Use: base, ethereum, or polygon' });
+    }
+
+    const balance = await getWalletBalanceFormatted(
+      address,
+      chain as 'base' | 'ethereum' | 'polygon'
+    );
+    
+    res.json({
+      address,
+      ...balance,
+    });
+  } catch (error: any) {
+    console.error('Error getting wallet balance:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch wallet balance' });
+  }
+});
+
+// Get wallet balance from all supported chains
+app.get('/api/wallet/:address/balance', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    
+    if (!isValidWalletAddress(address)) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+
+    const balances = await getWalletBalancesAllChains(address);
+    
+    res.json({
+      address,
+      balances,
+    });
+  } catch (error: any) {
+    console.error('Error getting wallet balances:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch wallet balances' });
+  }
+});
+
+// Get estimated gas fee for chain
+app.get('/api/wallet/gas-fee/:chain', async (req: Request, res: Response) => {
+  try {
+    const { chain } = req.params;
+    
+    if (!['base', 'ethereum', 'polygon'].includes(chain)) {
+      return res.status(400).json({ error: 'Invalid chain. Use: base, ethereum, or polygon' });
+    }
+
+    const gasFee = await estimateGasFee(chain as 'base' | 'ethereum' | 'polygon');
+    
+    res.json({
+      chain,
+      ...gasFee,
+    });
+  } catch (error: any) {
+    console.error('Error getting gas fee:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch gas fee' });
+  }
+});
+
+// Create a top-up deposit request
+app.post('/api/wallet/topup', async (req: Request, res: Response) => {
+  const { userId, amount, chain, paymentMethod } = req.body;
+  try {
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+    
+    if (!['base', 'ethereum', 'polygon'].includes(chain || 'base')) {
+      return res.status(400).json({ error: 'Invalid chain' });
+    }
+
+    // Get user and their wallet address
+    const userResult = await query('SELECT * FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+    
+    // Create top-up record in transactions table
+    const result = await query(
+      `INSERT INTO transactions (type, buyer_id, amount, details, status)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [
+        'topup',
+        userId,
+        amount,
+        JSON.stringify({
+          chain: chain || 'base',
+          paymentMethod: paymentMethod || 'stripe',
+          walletAddress: user.wallet_address,
+          externalId: `topup-${Date.now()}`,
+        }),
+        'pending',
+      ]
+    );
+
+    res.status(201).json({
+      transactionId: result.rows[0].id,
+      status: 'pending',
+      amount,
+      chain: chain || 'base',
+      userWallet: user.wallet_address,
+      message: 'Top-up initiated. Please complete payment.',
+    });
+  } catch (error: any) {
+    console.error('Error creating top-up:', error);
+    res.status(500).json({ error: error.message || 'Failed to create top-up' });
+  }
+});
+
+// Complete top-up deposit (called after payment confirmation)
+app.patch('/api/wallet/topup/:transactionId/confirm', async (req: Request, res: Response) => {
+  try {
+    const { transactionId } = req.params;
+
+    // Get transaction
+    const txResult = await query(
+      'SELECT * FROM transactions WHERE id = $1 AND type = $2',
+      [transactionId, 'topup']
+    );
+
+    if (txResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Top-up transaction not found' });
+    }
+
+    const transaction = txResult.rows[0];
+
+    // Update transaction status
+    const updateTxResult = await query(
+      `UPDATE transactions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
+      ['completed', transactionId]
+    );
+
+    // Update user wallet balance
+    const updateUserResult = await query(
+      `UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2 RETURNING *`,
+      [transaction.amount, transaction.buyer_id]
+    );
+
+    res.json({
+      transactionId,
+      status: 'completed',
+      newBalance: updateUserResult.rows[0].wallet_balance,
+      amount: transaction.amount,
+      message: 'Top-up successful. Funds added to your account.',
+    });
+  } catch (error: any) {
+    console.error('Error confirming top-up:', error);
+    res.status(500).json({ error: error.message || 'Failed to confirm top-up' });
+  }
+});
+
+// Get user's top-up history
+app.get('/api/wallet/topups/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    const result = await query(
+      `SELECT * FROM transactions 
+       WHERE buyer_id = $1 AND type = $2 
+       ORDER BY created_at DESC`,
+      [userId, 'topup']
+    );
+
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error('Error fetching top-ups:', error);
+    res.status(500).json({ error: 'Failed to fetch top-up history' });
+  }
+});
+
+// ========== SYNC WALLET BALANCE ==========
+
+// Sync user's database balance with blockchain balance
+app.post('/api/wallet/sync/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { chain } = req.body;
+
+    // Get user
+    const userResult = await query('SELECT * FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Get blockchain balance
+    const blockchainBalance = await getWalletBalanceFormatted(
+      user.wallet_address,
+      chain || 'base'
+    );
+
+    res.json({
+      userId,
+      walletAddress: user.wallet_address,
+      databaseBalance: user.wallet_balance,
+      blockchainBalance: {
+        formatted: blockchainBalance.formatted,
+        wei: blockchainBalance.wei,
+        token: blockchainBalance.token,
+        chain: blockchainBalance.chain,
+      },
+      synced: true,
+    });
+  } catch (error: any) {
+    console.error('Error syncing wallet:', error);
+    res.status(500).json({ error: error.message || 'Failed to sync wallet balance' });
   }
 });
 

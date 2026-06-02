@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { userAPI, type User } from "@/lib/api";
+import { userAPI, walletAPI, type User } from "@/lib/api";
 
 interface AuthContextValue {
   user: User | null;
@@ -22,6 +22,9 @@ interface AuthContextValue {
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => void;
   updateWalletBalance: (nextBalance: number) => Promise<{ ok: true } | { ok: false; error: string }>;
+  syncWalletBalance: (chain?: string) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
+  createTopup: (amount: number, chain?: string) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
+  confirmTopup: (transactionId: string) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
   submitArtistApplication: (data: {
     artistType: string;
     artistBio: string;
@@ -126,6 +129,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user]
   );
 
+  const syncWalletBalance = useCallback(
+    async (chain: string = 'base'): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
+      if (!user) return { ok: false, error: "Sign in to sync wallet." };
+      try {
+        const syncData = await walletAPI.syncBalance(user.id, chain);
+        return { ok: true, data: syncData };
+      } catch (err: any) {
+        return { ok: false, error: err.message };
+      }
+    },
+    [user]
+  );
+
+  const createTopup = useCallback(
+    async (amount: number, chain: string = 'base'): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
+      if (!user) return { ok: false, error: "Sign in to deposit funds." };
+      if (amount <= 0) return { ok: false, error: "Amount must be greater than 0." };
+      try {
+        const topupData = await walletAPI.createTopup(user.id, amount, chain, 'stripe');
+        return { ok: true, data: topupData };
+      } catch (err: any) {
+        return { ok: false, error: err.message };
+      }
+    },
+    [user]
+  );
+
+  const confirmTopup = useCallback(
+    async (transactionId: string): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
+      if (!user) return { ok: false, error: "Sign in to confirm deposit." };
+      try {
+        const confirmData = await walletAPI.confirmTopup(transactionId);
+        // Refresh user data
+        const updatedUser = await userAPI.getById(user.id);
+        localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
+        setUser(updatedUser);
+        return { ok: true, data: confirmData };
+      } catch (err: any) {
+        return { ok: false, error: err.message };
+      }
+    },
+    [user]
+  );
 
   const submitArtistApplication = useCallback(
     async (data: {
@@ -158,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut, updateWalletBalance, submitArtistApplication }}>
+    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut, updateWalletBalance, syncWalletBalance, createTopup, confirmTopup, submitArtistApplication }}>
       {children}
     </AuthContext.Provider>
   );
