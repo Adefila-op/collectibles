@@ -49,7 +49,7 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
   const [message, setMessage] = useState("");
   const topOffer = topOfferForCategory("Painting");
 
-  if (!user || user.artistStatus !== "approved") {
+  if (!user || user.artist_status !== "approved") {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-[400px] rounded-3xl border-0">

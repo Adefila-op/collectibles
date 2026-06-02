@@ -1,4 +1,6 @@
 import { AppFrame } from "@/components/AppFrame";
+import { ProfileModalDesktop } from "@/components/modals/ProfileModalDesktop";
+import { SwapModalDesktop } from "@/components/modals/SwapModalDesktop";
 import { getAllArtworks, fmt } from "@/lib/art-data";
 import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BadgeCheck, Calendar, LogIn, Palette, Repeat2, Plus, TrendingUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +31,7 @@ function walletAddressForUser(userId: string) {
 export default function Profile() {
   const { user, signOut, updateWalletBalance, submitArtistApplication } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw" | null>(null);
   const [artistOpen, setArtistOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState("100");
@@ -111,18 +114,26 @@ export default function Profile() {
     setWalletMessage(`${withdrawAmount} USDC sent on ${network}. Spending balance updated.`);
   }
 
-  function handleArtistApply() {
+  async function handleArtistApply() {
     if (!artistForm.artistType || !artistForm.artistBio || !artistForm.portfolioUrl) {
       setArtistMessage("Artist type, bio, and portfolio are required.");
       return;
     }
-    const result = submitArtistApplication(artistForm);
+    const result = await submitArtistApplication(artistForm);
     setArtistMessage(result.ok ? "Application submitted. Your account stays collector-only until approval." : result.error);
   }
 
   return (
-    <AppFrame label="Profile · Wallet">
-      <div className="px-5 pt-3 pb-6">
+    <>
+      <AppFrame
+        label="Profile · Wallet"
+        desktop={
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+            <ProfileModalDesktop open={true} onOpenChange={() => {}} />
+          </div>
+        }
+      >
+        <div className="px-5 pt-3 pb-6">
         <div className="mb-4 flex items-center gap-3">
           <Link to="/explore" className="grid h-9 w-9 place-items-center rounded-full border border-border bg-card">
             <ArrowLeft className="h-4 w-4" />
@@ -151,7 +162,7 @@ export default function Profile() {
                 </div>
                 <div className="text-[11px] text-muted-foreground">
                   Lagos · Collector since{" "}
-                  {new Date(user.createdAt).toLocaleDateString("en", {
+                  {new Date(user.created_at).toLocaleDateString("en", {
                     year: "numeric",
                     month: "long",
                   })}
@@ -276,28 +287,18 @@ export default function Profile() {
                     
                     {holding.status === 'owned' && (
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        {user.artistStatus === "approved" ? (
-                          <Link
-                            to="/list"
-                            className="rounded-lg bg-primary/10 hover:bg-primary/20 py-2 text-center text-[10px] font-semibold text-primary transition flex items-center justify-center gap-1"
-                          >
-                            <Plus className="h-3 w-3" /> List
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setArtistOpen(true)}
-                            className="rounded-lg bg-primary/10 py-2 text-center text-[10px] font-semibold text-primary transition flex items-center justify-center gap-1"
-                          >
-                            <Palette className="h-3 w-3" /> Apply
-                          </button>
-                        )}
                         <Link
-                          to="/swap"
+                          to={`/list/${art!.id}`}
+                          className="rounded-lg bg-primary/10 hover:bg-primary/20 py-2 text-center text-[10px] font-semibold text-primary transition flex items-center justify-center gap-1"
+                        >
+                          <Plus className="h-3 w-3" /> {user.artistStatus === "approved" ? "List" : "Resell"}
+                        </Link>
+                        <button
+                          onClick={() => setSwapModalOpen(true)}
                           className="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 py-2 text-center text-[10px] font-semibold text-emerald-600 transition flex items-center justify-center gap-1"
                         >
                           <Repeat2 className="h-3 w-3" /> Swap
-                        </Link>
+                        </button>
                       </div>
                     )}
 
@@ -500,6 +501,8 @@ export default function Profile() {
       </Dialog>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
-    </AppFrame>
+      <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
+      </AppFrame>
+    </>
   );
 }

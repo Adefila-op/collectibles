@@ -1,8 +1,10 @@
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
+import { ArtistProfileDesktop } from "@/components/ArtistProfileDesktop";
 import { getAllArtworks, fmt } from "@/lib/art-data";
 import { getUsers } from "@/lib/db";
 import { ArrowLeft, Calendar, ExternalLink, MapPin, Star } from "lucide-react";
+import { Link } from "react-router-dom";
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -81,7 +83,10 @@ export default function ArtistProfile() {
   const totalMarket = portfolio.reduce((sum, art) => sum + art.price, 0);
 
   return (
-    <AppFrame label="Artist profile">
+    <AppFrame
+      label="Artist profile"
+      desktop={<ArtistProfileDesktop slug={slug || ""} />}
+    >
       <div className="space-y-4 px-5 pt-3 pb-6">
         <div className="flex items-center gap-3">
           <Link to="/explore" className="grid h-8 w-8 place-items-center rounded-full border border-border bg-card">

@@ -56,7 +56,7 @@ export default function OfferPage() {
       return;
     }
 
-    if (amount > user.walletBalance) {
+    if (amount > (user.walletBalance as number)) {
       setMessage("Deposit more funds before placing an offer this large.");
       return;
     }
@@ -105,7 +105,7 @@ export default function OfferPage() {
             placeholder="Enter amount"
             className="w-full rounded-2xl border border-border bg-muted/60 px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
           />
-          <div className="text-xs text-muted-foreground">Available balance: {fmt(user.walletBalance)}</div>
+          <div className="text-xs text-muted-foreground">Available balance: {fmt(user.walletBalance as number)}</div>
         </div>
 
         {message && (

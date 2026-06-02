@@ -6,16 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import {
-  getSession,
-  createSession,
-  clearSession,
-  createUser,
-  verifyCredentials,
-  updateUserWalletBalance,
-  applyAsArtist,
-  type User,
-} from "@/lib/db";
+import { userAPI, type User } from "@/lib/api";
 
 interface AuthContextValue {
   user: User | null;
@@ -30,7 +21,7 @@ interface AuthContextValue {
     password: string
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => void;
-  updateWalletBalance: (nextBalance: number) => { ok: true } | { ok: false; error: string };
+  updateWalletBalance: (nextBalance: number) => Promise<{ ok: true } | { ok: false; error: string }>;
   submitArtistApplication: (data: {
     artistType: string;
     artistBio: string;
@@ -38,7 +29,7 @@ interface AuthContextValue {
     socialUrl: string;
     liveLocation: string;
     callUrl: string;
-  }) => { ok: true } | { ok: false; error: string };
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -48,8 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const result = getSession();
-    setUser(result?.user ?? null);
+    const sessionStr = localStorage.getItem("artchain_session");
+    if (sessionStr) {
+      try {
+        const session = JSON.parse(sessionStr);
+        setUser(session.user);
+      } catch (err) {
+        console.error("Failed to load session:", err);
+      }
+    }
     setIsLoading(false);
   }, []);
 
@@ -58,11 +56,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
-      const result = verifyCredentials(email, password);
-      if (!result.ok) return result;
-      createSession(result.user);
-      setUser(result.user);
-      return { ok: true };
+      try {
+        const users = await userAPI.getAll();
+        const user = users.find((u: User) => u.email === email);
+        
+        if (!user) {
+          return { ok: false, error: "User not found" };
+        }
+        
+        if (user.password !== password) {
+          return { ok: false, error: "Invalid password" };
+        }
+        
+        localStorage.setItem("artchain_session", JSON.stringify({ user }));
+        setUser(user);
+        return { ok: true };
+      } catch (err: any) {
+        return { ok: false, error: err.message };
+      }
     },
     []
   );
@@ -73,45 +84,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string,
       password: string
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
-      const result = createUser(name, email, password);
-      if (!result.ok) return result;
-      createSession(result.user);
-      setUser(result.user);
-      return { ok: true };
+      try {
+        const newUser = await userAPI.create({ email, password, name, avatar: name.charAt(0).toUpperCase() });
+        localStorage.setItem("artchain_session", JSON.stringify({ user: newUser }));
+        setUser(newUser);
+        return { ok: true };
+      } catch (err: any) {
+        return { ok: false, error: err.message };
+      }
     },
     []
   );
 
   const signOut = useCallback(() => {
-    clearSession();
+    localStorage.removeItem("artchain_session");
     setUser(null);
   }, []);
 
   const updateWalletBalance = useCallback(
-    (nextBalance: number): { ok: true } | { ok: false; error: string } => {
+    async (nextBalance: number): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!user) return { ok: false, error: "Sign in to use your wallet." };
-      const result = updateUserWalletBalance(user.id, nextBalance);
-      if (!result.ok) return result;
-      setUser(result.user);
-      return { ok: true };
+      try {
+        const updatedUser = await userAPI.updateWallet(user.id, nextBalance - user.wallet_balance);
+        localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
+        setUser(updatedUser);
+        return { ok: true };
+      } catch (err: any) {
+        return { ok: false, error: err.message };
+      }
     },
     [user]
   );
 
+
   const submitArtistApplication = useCallback(
-    (data: {
+    async (data: {
       artistType: string;
       artistBio: string;
       portfolioUrl: string;
       socialUrl: string;
       liveLocation: string;
       callUrl: string;
-    }): { ok: true } | { ok: false; error: string } => {
+    }): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!user) return { ok: false, error: "Sign in to apply as an artist." };
-      const result = applyAsArtist(user.id, data);
-      if (!result.ok) return result;
-      setUser(result.user);
-      return { ok: true };
+      try {
+        const updatedUser = await userAPI.updateArtistStatus(user.id, {
+          status: "pending",
+          artistType: data.artistType,
+          artistBio: data.artistBio,
+          portfolioUrl: data.portfolioUrl,
+          socialUrl: data.socialUrl,
+          liveLocation: data.liveLocation,
+          callUrl: data.callUrl,
+        });
+        localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
+        setUser(updatedUser);
+        return { ok: true };
+      } catch (err: any) {
+        return { ok: false, error: err.message };
+      }
     },
     [user]
   );

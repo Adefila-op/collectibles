@@ -61,7 +61,7 @@ export function OfferModal({ open, onOpenChange, artId }: OfferModalProps) {
       return;
     }
 
-    if (amount > user.walletBalance) {
+    if (amount > user.wallet_balance) {
       setMessage("Deposit more funds before placing an offer this large.");
       return;
     }

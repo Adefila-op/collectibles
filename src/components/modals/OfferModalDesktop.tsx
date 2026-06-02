@@ -64,7 +64,7 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
     );
   }
 
-  function handlePlaceOffer() {
+  async function handlePlaceOffer() {
     if (!user || !targetArt || !artId) return;
 
     const amount = parseInt(offerAmount.replace(/[^0-9]/g, ""));
@@ -73,7 +73,7 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
       return;
     }
 
-    if (amount > user.walletBalance) {
+    if (amount > (user.walletBalance as number)) {
       setShowInsufficientBalance(true);
       return;
     }
@@ -82,8 +82,8 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
     createOffer(artId, user.id, amount);
     
     // Deduct from wallet balance
-    const remainingBalance = user.walletBalance - amount;
-    const result = updateWalletBalance(remainingBalance);
+    const remainingBalance = (user.walletBalance || 0) - amount;
+    const result = await updateWalletBalance(remainingBalance);
     
     if (!result.ok) {
       setMessage(result.error);
@@ -143,7 +143,7 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
                 Insufficient Balance
               </div>
               <div className="text-red-600 text-xs">
-                You need {fmt(parseInt(offerAmount.replace(/[^0-9]/g, "") || "0") - user.walletBalance)} more to place this offer.
+                You need {fmt(parseInt(offerAmount.replace(/[^0-9]/g, "") || "0") - (user.walletBalance as number))} more to place this offer.
               </div>
               <button
                 onClick={() => {

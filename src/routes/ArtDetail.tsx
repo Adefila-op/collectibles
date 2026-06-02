@@ -1,9 +1,11 @@
 import { Link, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import { getAllArtworks, getArt, fmt, type Art } from "@/lib/art-data";
 import { OFFERS } from "@/lib/offers-data";
+import { AcceptOfferModal } from "@/components/modals/AcceptOfferModal";
 import {
   ArrowLeft,
   Award,
@@ -95,6 +97,7 @@ function DesktopArtworkDetail({
   uniqueId,
   suggestedCollection,
   collectionOffers,
+  onAcceptOffer,
 }: {
   art: Art;
   isOwned: boolean;
@@ -102,6 +105,7 @@ function DesktopArtworkDetail({
   uniqueId: string;
   suggestedCollection: Art[];
   collectionOffers: typeof OFFERS;
+  onAcceptOffer?: (offerId: string, amount: number, buyerName: string) => void;
 }) {
   const artistWorks = getAllArtworks().filter((item) => item.artist === art.artist);
   const artistValue = artistWorks.reduce((sum, item) => sum + item.price, 0);
@@ -184,10 +188,10 @@ function DesktopArtworkDetail({
                   {isOwned ? (
                     <div className="grid grid-cols-2 gap-3">
                       <Link
-                        to={`/list?artId=${art.id}`}
+                        to={`/list/${art.id}`}
                         className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
                       >
-                        <Wallet className="h-4 w-4" /> List
+                        <Wallet className="h-4 w-4" /> Resell
                       </Link>
                       <Link
                         to={`/swap?artId=${art.id}`}
@@ -306,12 +310,23 @@ function DesktopArtworkDetail({
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold">{fmt(offer.cash)}</div>
-                    <Link
-                      to={isOwned ? `/swap?artId=${art.id}&offerId=${offer.id}` : `/offer?artId=${art.id}`}
-                      className="text-xs font-semibold text-primary"
-                    >
-                      {isOwned ? "Swap" : "Accept"}
-                    </Link>
+                    {isOwned ? (
+                      <Link
+                        to={`/swap?artId=${art.id}&offerId=${offer.id}`}
+                        className="text-xs font-semibold text-primary"
+                      >
+                        Swap
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          onAcceptOffer?.(offer.id, offer.cash, offer.buyer);
+                        }}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >
+                        Accept
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -327,6 +342,9 @@ function DesktopArtworkDetail({
 export default function ArtDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const [acceptOfferOpen, setAcceptOfferOpen] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState<{ id: string; amount: number; buyerName: string } | null>(null);
+  
   const a = getArt(id!);
   
   const userHoldings = user ? getHoldings(user.id) : [];
@@ -406,6 +424,10 @@ export default function ArtDetail() {
               : allArtworks.filter((art) => art.id !== a.id).slice(0, 3)
           }
           collectionOffers={collectionOffers.length ? collectionOffers : OFFERS.slice(0, 4)}
+          onAcceptOffer={(offerId, amount, buyerName) => {
+            setSelectedOffer({ id: offerId, amount, buyerName });
+            setAcceptOfferOpen(true);
+          }}
         />
       }
     >
@@ -469,10 +491,10 @@ export default function ArtDetail() {
           {isOwned ? (
             <>
               <Link
-                to={`/list?artId=${a.id}`}
+                to={`/list/${a.id}`}
                 className="rounded-2xl bg-slate-950 py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition hover:bg-slate-800"
               >
-                <Wallet className="h-4 w-4" /> List
+                <Wallet className="h-4 w-4" /> Resell
               </Link>
               <Link
                 to={`/swap?artId=${a.id}`}
@@ -682,6 +704,17 @@ export default function ArtDetail() {
           </div>
         </div>
       </div>
+      
+      {selectedOffer && (
+        <AcceptOfferModal
+          open={acceptOfferOpen}
+          onOpenChange={setAcceptOfferOpen}
+          offerId={selectedOffer.id}
+          artId={a.id}
+          offerAmount={selectedOffer.amount}
+          offerBuyerName={selectedOffer.buyerName}
+        />
+      )}
     </AppFrame>
   );
 }

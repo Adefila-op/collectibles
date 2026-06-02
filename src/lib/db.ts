@@ -98,12 +98,68 @@ export interface ArtworkValuationEvent {
   reference?: string;
 }
 
+// ── NEW: Transaction Management ─────────────────────────────────────────────
+
+export interface Transaction {
+  id: string;
+  type: "purchase" | "resale" | "swap" | "offer_accepted" | "royalty" | "withdrawal" | "topup";
+  buyerId: string;
+  sellerId?: string;
+  artId?: string;
+  amount: number;
+  commission?: number; // platform fee
+  royalty?: number; // artist royalty
+  status: "pending" | "escrow" | "completed" | "failed";
+  escrowId?: string;
+  notes?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface Escrow {
+  id: string;
+  transactionId: string;
+  amount: number;
+  fromUserId: string;
+  toUserId: string;
+  artId: string;
+  status: "pending" | "completed" | "released" | "refunded";
+  releasedAt?: string;
+  createdAt: string;
+}
+
+export interface ArtistRoyalty {
+  id: string;
+  artistId: string;
+  artId: string;
+  transactionId: string;
+  rate: number; // percentage (e.g., 10)
+  amount: number;
+  status: "pending" | "paid";
+  createdAt: string;
+  paidAt?: string;
+}
+
+export interface AdminEvent {
+  id: string;
+  action: string;
+  adminId: string;
+  targetUserId?: string;
+  targetArtId?: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
 const USERS_KEY = "artchain_users";
 const SESSION_KEY = "artchain_session";
 const HOLDINGS_KEY = "artchain_holdings";
 const OFFERS_KEY = "artchain_offers";
 const SWAPS_KEY = "artchain_swaps";
 const ARTWORKS_KEY = "artchain_artworks";
+const TRANSACTIONS_KEY = "artchain_transactions";
+const ESCROW_KEY = "artchain_escrow";
+const ROYALTIES_KEY = "artchain_royalties";
+const ADMIN_EVENTS_KEY = "artchain_admin_events";
 
 // Minimal hash — not production-grade, just for local demo
 function hashPassword(password: string): string {
@@ -333,6 +389,20 @@ export function updateHoldingStatus(
   }
   saveHoldings(holdings);
   return holding;
+}
+
+// Initialize demo holdings for a user (called on first portfolio view)
+export function initializeDemoHoldingsIfNeeded(userId: string): void {
+  const existing = getHoldings(userId);
+  if (existing.length > 0) return; // Already has holdings
+
+  // Add sample holdings for portfolio display
+  const artIds = ["harmattan", "lagoon", "bronze"];
+  const statuses: UserHolding["status"][] = ["owned", "owned", "listed"];
+  
+  artIds.forEach((artId, index) => {
+    addHolding(userId, artId, statuses[index]);
+  });
 }
 
 // ── Offers ───────────────────────────────────────────────────────────────────
@@ -610,4 +680,254 @@ export function getArtworkOwner(artId: string): { userId: string; userName: stri
   if (!user) return null;
   
   return { userId: ownedHolding.userId, userName: user.name };
+}
+
+// ── Transactions ────────────────────────────────────────────────────────────
+
+function getTransactions(): Transaction[] {
+  try {
+    return JSON.parse(localStorage.getItem(TRANSACTIONS_KEY) || "[]") as Transaction[];
+  } catch {
+    return [];
+  }
+}
+
+function saveTransactions(transactions: Transaction[]): void {
+  localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+}
+
+export function createTransaction(
+  type: Transaction["type"],
+  buyerId: string,
+  amount: number,
+  options?: {
+    sellerId?: string;
+    artId?: string;
+    commission?: number;
+    royalty?: number;
+    notes?: string;
+  }
+): Transaction {
+  const transaction: Transaction = {
+    id: crypto.randomUUID(),
+    type,
+    buyerId,
+    sellerId: options?.sellerId,
+    artId: options?.artId,
+    amount,
+    commission: options?.commission,
+    royalty: options?.royalty,
+    status: options?.artId ? "escrow" : "pending",
+    notes: options?.notes,
+    createdAt: new Date().toISOString(),
+  };
+  const transactions = getTransactions();
+  transactions.push(transaction);
+  saveTransactions(transactions);
+  return transaction;
+}
+
+export function getTransactionHistory(userId?: string, type?: Transaction["type"]): Transaction[] {
+  let transactions = getTransactions();
+  if (userId) {
+    transactions = transactions.filter((t) => t.buyerId === userId || t.sellerId === userId);
+  }
+  if (type) {
+    transactions = transactions.filter((t) => t.type === type);
+  }
+  return transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function completeTransaction(
+  transactionId: string
+): Transaction | null {
+  const transactions = getTransactions();
+  const transaction = transactions.find((t) => t.id === transactionId);
+  if (!transaction) return null;
+  transaction.status = "completed";
+  transaction.completedAt = new Date().toISOString();
+  saveTransactions(transactions);
+  return transaction;
+}
+
+// ── Escrow ──────────────────────────────────────────────────────────────────
+
+function getEscrows(): Escrow[] {
+  try {
+    return JSON.parse(localStorage.getItem(ESCROW_KEY) || "[]") as Escrow[];
+  } catch {
+    return [];
+  }
+}
+
+function saveEscrows(escrows: Escrow[]): void {
+  localStorage.setItem(ESCROW_KEY, JSON.stringify(escrows));
+}
+
+export function createEscrow(
+  transactionId: string,
+  amount: number,
+  fromUserId: string,
+  toUserId: string,
+  artId: string
+): Escrow {
+  const escrow: Escrow = {
+    id: crypto.randomUUID(),
+    transactionId,
+    amount,
+    fromUserId,
+    toUserId,
+    artId,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+  const escrows = getEscrows();
+  escrows.push(escrow);
+  saveEscrows(escrows);
+
+  // Update transaction escrowId
+  const transactions = getTransactions();
+  const transaction = transactions.find((t) => t.id === transactionId);
+  if (transaction) {
+    transaction.escrowId = escrow.id;
+    saveTransactions(transactions);
+  }
+
+  return escrow;
+}
+
+export function releaseEscrow(escrowId: string): Escrow | null {
+  const escrows = getEscrows();
+  const escrow = escrows.find((e) => e.id === escrowId);
+  if (!escrow) return null;
+  
+  escrow.status = "released";
+  escrow.releasedAt = new Date().toISOString();
+  saveEscrows(escrows);
+
+  // Transfer funds from buyer to seller
+  const users = getUsers();
+  const buyer = users.find((u) => u.id === escrow.fromUserId);
+  const seller = users.find((u) => u.id === escrow.toUserId);
+  
+  if (buyer && seller) {
+    // Already deducted from buyer, add to seller
+    seller.walletBalance += escrow.amount * 0.9; // 10% platform fee
+    saveUsers(users);
+  }
+
+  return escrow;
+}
+
+export function getEscrowByTransaction(transactionId: string): Escrow | null {
+  const escrows = getEscrows();
+  return escrows.find((e) => e.transactionId === transactionId) || null;
+}
+
+// ── Artist Royalties ────────────────────────────────────────────────────────
+
+function getRoyalties(): ArtistRoyalty[] {
+  try {
+    return JSON.parse(localStorage.getItem(ROYALTIES_KEY) || "[]") as ArtistRoyalty[];
+  } catch {
+    return [];
+  }
+}
+
+function saveRoyalties(royalties: ArtistRoyalty[]): void {
+  localStorage.setItem(ROYALTIES_KEY, JSON.stringify(royalties));
+}
+
+export function createRoyalty(
+  artistId: string,
+  artId: string,
+  transactionId: string,
+  rate: number,
+  amount: number
+): ArtistRoyalty {
+  const royalty: ArtistRoyalty = {
+    id: crypto.randomUUID(),
+    artistId,
+    artId,
+    transactionId,
+    rate,
+    amount,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+  const royalties = getRoyalties();
+  royalties.push(royalty);
+  saveRoyalties(royalties);
+  return royalty;
+}
+
+export function payRoyalty(royaltyId: string): ArtistRoyalty | null {
+  const royalties = getRoyalties();
+  const royalty = royalties.find((r) => r.id === royaltyId);
+  if (!royalty) return null;
+
+  // Pay artist
+  const users = getUsers();
+  const artist = users.find((u) => u.id === royalty.artistId);
+  if (artist) {
+    artist.walletBalance += royalty.amount;
+    saveUsers(users);
+  }
+
+  royalty.status = "paid";
+  royalty.paidAt = new Date().toISOString();
+  saveRoyalties(royalties);
+  return royalty;
+}
+
+export function getArtistRoyalties(artistId: string): ArtistRoyalty[] {
+  const royalties = getRoyalties();
+  return royalties.filter((r) => r.artistId === artistId);
+}
+
+export function getTotalPendingRoyalties(artistId: string): number {
+  const royalties = getArtistRoyalties(artistId);
+  return royalties
+    .filter((r) => r.status === "pending")
+    .reduce((sum, r) => sum + r.amount, 0);
+}
+
+// ── Admin Events ────────────────────────────────────────────────────────────
+
+function getAdminEvents(): AdminEvent[] {
+  try {
+    return JSON.parse(localStorage.getItem(ADMIN_EVENTS_KEY) || "[]") as AdminEvent[];
+  } catch {
+    return [];
+  }
+}
+
+function saveAdminEvents(events: AdminEvent[]): void {
+  localStorage.setItem(ADMIN_EVENTS_KEY, JSON.stringify(events));
+}
+
+export function logAdminEvent(
+  action: string,
+  adminId: string,
+  details: Record<string, unknown>,
+  options?: { targetUserId?: string; targetArtId?: string }
+): AdminEvent {
+  const event: AdminEvent = {
+    id: crypto.randomUUID(),
+    action,
+    adminId,
+    targetUserId: options?.targetUserId,
+    targetArtId: options?.targetArtId,
+    details,
+    createdAt: new Date().toISOString(),
+  };
+  const events = getAdminEvents();
+  events.push(event);
+  saveAdminEvents(events);
+  return event;
+}
+
+export function getAdminEventHistory(limit = 100): AdminEvent[] {
+  const events = getAdminEvents();
+  return events.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
 }

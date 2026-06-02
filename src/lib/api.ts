@@ -1,0 +1,178 @@
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+// Add property aliases for backward compatibility
+function addUserAliases(user: any): any {
+  if (!user) return user;
+  return {
+    ...user,
+    walletBalance: user.wallet_balance,
+    artistStatus: user.artist_status,
+    createdAt: user.created_at,
+  };
+}
+
+function addArtAliases(art: any): any {
+  if (!art) return art;
+  return { ...art };
+}
+
+// Types
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  avatar: string;
+  wallet_balance: number;
+  artist_status: 'collector' | 'pending' | 'approved';
+  artist_type?: string;
+  artist_bio?: string;
+  portfolio_url?: string;
+  social_url?: string;
+  live_location?: string;
+  call_url?: string;
+  created_at: string;
+  
+  // Aliases for backward compatibility
+  walletBalance?: number;
+  artistStatus?: 'collector' | 'pending' | 'approved';
+  createdAt?: string;
+}
+
+export interface Art {
+  id: string;
+  token: string;
+  name: string;
+  artist: string;
+  category: string;
+  city: string;
+  year: number;
+  price: number;
+  image: string;
+  description: string;
+  unique_id: string;
+}
+
+export interface Transaction {
+  id: string;
+  type: string;
+  buyer_id?: string;
+  seller_id?: string;
+  amount: number;
+  art_id?: string;
+  status: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+// Helper function for API calls
+async function apiCall(endpoint: string, options: RequestInit = {}) {
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'API error' }));
+    throw new Error(error.error || `API error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+// User API
+export const userAPI = {
+  getAll: async () => {
+    const users = await apiCall('/api/users');
+    return users.map(addUserAliases);
+  },
+  getById: async (id: string) => {
+    const user = await apiCall(`/api/users/${id}`);
+    return addUserAliases(user);
+  },
+  create: async (user: Partial<User> & { password: string }) => {
+    const newUser = await apiCall('/api/users', { method: 'POST', body: JSON.stringify(user) });
+    return addUserAliases(newUser);
+  },
+  updateWallet: async (userId: string, amount: number) => {
+    const user = await apiCall(`/api/users/${userId}/wallet`, { 
+      method: 'PATCH', 
+      body: JSON.stringify({ amount }) 
+    });
+    return addUserAliases(user);
+  },
+  updateArtistStatus: async (userId: string, data: any) => {
+    const user = await apiCall(`/api/users/${userId}/artist-status`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    return addUserAliases(user);
+  },
+};
+
+// Artwork API
+export const artAPI = {
+  getAll: () => apiCall('/api/artworks'),
+  getById: (id: string) => apiCall(`/api/artworks/${id}`),
+};
+
+// Holdings API
+export const holdingsAPI = {
+  getByUserId: (userId: string) => apiCall(`/api/holdings/${userId}`),
+  create: (userId: string, artId: string, status: string = 'owned') =>
+    apiCall('/api/holdings', {
+      method: 'POST',
+      body: JSON.stringify({ userId, artId, status }),
+    }),
+};
+
+// Offers API
+export const offersAPI = {
+  getAll: () => apiCall('/api/offers'),
+  getByArtId: (artId: string) => apiCall(`/api/offers/art/${artId}`),
+};
+
+// Transactions API
+export const transactionsAPI = {
+  getAll: (limit: number = 50) => apiCall(`/api/transactions?limit=${limit}`),
+  getByUserId: (userId: string) => apiCall(`/api/transactions/${userId}`),
+  create: (data: any) =>
+    apiCall('/api/transactions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  complete: (transactionId: string) =>
+    apiCall(`/api/transactions/${transactionId}/complete`, {
+      method: 'PATCH',
+    }),
+};
+
+// Escrow API
+export const escrowAPI = {
+  getByTransactionId: (transactionId: string) =>
+    apiCall(`/api/escrow/${transactionId}`),
+  create: (data: any) =>
+    apiCall('/api/escrow', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  release: (escrowId: string) =>
+    apiCall(`/api/escrow/${escrowId}/release`, {
+      method: 'PATCH',
+    }),
+};
+
+// Admin API
+export const adminAPI = {
+  getEvents: (limit: number = 50) => apiCall(`/api/admin/events?limit=${limit}`),
+  logEvent: (data: any) =>
+    apiCall('/api/admin/events', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
+// Health check
+export const healthCheck = () => apiCall('/api/health');

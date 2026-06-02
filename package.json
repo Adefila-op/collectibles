@@ -8,7 +8,10 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "db:init": "tsx api/init-db.ts",
+    "api": "tsx api/server.ts",
+    "start": "node dist/api/server.js"
   },
   "engines": {
     "node": "24.x"
@@ -45,10 +48,14 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
+    "cors": "^2.8.6",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.4.2",
     "embla-carousel-react": "^8.3.0",
+    "express": "^5.2.1",
     "input-otp": "^1.3.4",
     "lucide-react": "^0.460.0",
+    "pg": "^8.21.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
@@ -59,12 +66,15 @@
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^14.0.0",
     "vaul": "^0.9.6",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.7.4",
+    "@types/pg": "^8.20.0",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
     "@vercel/node": "^5.8.8",
@@ -77,6 +87,8 @@
     "postcss": "^8.4.47",
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.13",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.3",
     "vite": "^5.4.8"
   }

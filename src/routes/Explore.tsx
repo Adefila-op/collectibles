@@ -8,8 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getAllArtworks, fmt, ARTWORKS, type Art } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
+import { artAPI, type Art } from "@/lib/api";
 import { OFFERS } from "@/lib/offers-data";
+import { ARTWORKS } from "@/lib/art-data";
 import {
   ArrowRight,
   Banknote,
@@ -38,10 +40,13 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings, type UserHolding } from "@/lib/db";
+import { getHoldings, initializeDemoHoldingsIfNeeded, type UserHolding } from "@/lib/db";
 import { BuyArtModal } from "@/components/modals/BuyArtModal";
+import { BuyArtModalDesktop } from "@/components/modals/BuyArtModalDesktop";
 import { OfferModal } from "@/components/modals/OfferModal";
+import { OfferModalDesktop } from "@/components/modals/OfferModalDesktop";
 import { SwapModal } from "@/components/modals/SwapModal";
+import { SwapModalDesktop } from "@/components/modals/SwapModalDesktop";
 import { AuthModal } from "@/components/AuthModal";
 import { TransactionModal } from "@/components/modals/TransactionModal";
 import { ListingModalDesktop } from "@/components/modals/ListingModalDesktop";
@@ -88,10 +93,36 @@ export default function Explore() {
   const [pendingAction, setPendingAction] = useState<
     { type: "buy"; art: Art } | { type: "offer"; artId: string } | { type: "topup" } | { type: "list" } | null
   >(null);
+  const [holdingsVersion, setHoldingsVersion] = useState(0);
+  const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [isLoadingArtworks, setIsLoadingArtworks] = useState(true);
 
-  const allArtworks = useMemo(() => getAllArtworks(), []);
   const userHoldings = user ? getHoldings(user.id) : [];
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
+
+  // Fetch artworks from API
+  useEffect(() => {
+    const fetchArtworks = async () => {
+      try {
+        setIsLoadingArtworks(true);
+        const artworks = await artAPI.getAll();
+        setAllArtworks(artworks);
+      } catch (err) {
+        console.error("Failed to fetch artworks:", err);
+      } finally {
+        setIsLoadingArtworks(false);
+      }
+    };
+    fetchArtworks();
+  }, []);
+
+  // Initialize demo holdings when viewing portfolio for the first time
+  useEffect(() => {
+    if (user && activeSection === "portfolio") {
+      initializeDemoHoldingsIfNeeded(user.id);
+      setHoldingsVersion((v) => v + 1);
+    }
+  }, [user, activeSection]);
 
   function handleSectionChange(section: DashboardSection) {
     setActiveSection(section);
@@ -223,14 +254,17 @@ export default function Explore() {
         open={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
       />
-      <BuyArtModal open={buyModalOpen} onOpenChange={setBuyModalOpen} />
-      <OfferModal open={offerModalOpen} onOpenChange={setOfferModalOpen} artId={offerArtId} />
-      <SwapModal open={swapModalOpen} onOpenChange={setSwapModalOpen} />
+      <BuyArtModalDesktop open={buyModalOpen} onOpenChange={setBuyModalOpen} />
+      <OfferModalDesktop open={offerModalOpen} onOpenChange={setOfferModalOpen} artId={offerArtId} onTopUpClick={handleTopUpClick} />
+      <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
       <ArtistApplicationGateModal
         open={artistGateOpen}
         onOpenChange={setArtistGateOpen}
         artistStatus={user?.artistStatus ?? "collector"}
-        onSubmit={submitArtistApplication}
+        onSubmit={(data) => {
+          submitArtistApplication(data).catch(console.error);
+          return { ok: true };
+        }}
       />
       <ListingModalDesktop open={listingModalOpen} onOpenChange={setListingModalOpen} />
       <TopUpModal open={topUpOpen} onOpenChange={setTopUpOpen} />
@@ -278,7 +312,10 @@ export default function Explore() {
               userName={user?.name || "Kwame Mensah"}
               userId={user?.id || "demo-user"}
               walletBalance={user?.walletBalance || 1240500}
-              onWalletBalanceChange={updateWalletBalance}
+              onWalletBalanceChange={(balance) => {
+                updateWalletBalance(balance).catch(console.error);
+                return { ok: true };
+              }}
               initials={user?.avatar || "KM"}
               onBuyClick={handleBuyClick}
               onOfferClick={handleOfferClick}
@@ -287,6 +324,7 @@ export default function Explore() {
               onTopUpClick={handleTopUpClick}
               topUpRequestKey={topUpRequestKey}
               onListArtClick={handleListArtClick}
+              onSwapClick={() => setSwapModalOpen(true)}
             />
           </>
         }
@@ -314,7 +352,7 @@ export default function Explore() {
             {[
               { 
                 t: "Category", 
-                opts: ["Paintings", "Sculpture", "Textile", "Beadwork", "Photo"], 
+                opts: ["Painting", "Sculpture", "Textile", "Beadwork"], 
                 selected: selectedCategory,
                 onChange: setSelectedCategory
               },
@@ -658,6 +696,7 @@ function DesktopMarketplace({
   onTopUpClick,
   topUpRequestKey,
   onListArtClick,
+  onSwapClick,
 }: {
   artworks: Art[];
   allArtworks: Art[];
@@ -687,6 +726,7 @@ function DesktopMarketplace({
   onTopUpClick: () => void;
   topUpRequestKey: number;
   onListArtClick: () => void;
+  onSwapClick: () => void;
 }) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositMethod, setDepositMethod] = useState<"crypto" | "card">("crypto");
@@ -696,8 +736,8 @@ function DesktopMarketplace({
   const [depositCardCvv, setDepositCardCvv] = useState("");
   const [network, setNetwork] = useState<(typeof NETWORKS)[number]>("Base");
   const [depositMessage, setDepositMessage] = useState("");
-  const categories = ["Painting", "Sculpture", "Textile", "Beadwork", "Photo"];
-  const cities = ["Lagos", "Dakar", "Accra", "Ibadan", "Senegal"];
+  const categories = ["Painting", "Sculpture", "Textile", "Beadwork"];
+  const cities = ["Lagos", "Dakar", "Accra", "Ibadan"];
   const statuses = ["For sale", "Swap only", "Any"];
   const walletAddress = walletAddressForUser(userId);
   const depositNaira = Math.max(0, Math.round((Number(depositAmount) || 0) * NAIRA_PER_USDC));
@@ -904,6 +944,7 @@ function DesktopMarketplace({
                   onWalletBalanceChange={onWalletBalanceChange}
                   userName={userName}
                   initials={initials}
+                  onSwapClick={onSwapClick}
                 />
               ) : activeSection === "artists" ? (
                 <ArtistDashboard artists={artists} />
@@ -988,8 +1029,8 @@ function DesktopMarketplace({
                               <button
                                 onClick={() => {
                                   if (isOwned) {
-                                    // For swap, we'd navigate to swap route
-                                    window.location.href = "/swap";
+                                    // Open swap modal for desktop
+                                    onSwapClick();
                                   } else {
                                     onOfferClick(art.id);
                                   }
@@ -1241,17 +1282,19 @@ function PortfolioDashboard({
   onWalletBalanceChange,
   userName,
   initials,
+  onSwapClick,
 }: {
   items: { holding: UserHolding; art: Art }[];
   walletBalance: number;
   onWalletBalanceChange: (balance: number) => void;
   userName: string;
   initials: string;
+  onSwapClick?: () => void;
 }) {
-  const collectionItems =
+  const collectionItems: { holding: UserHolding; art: Art }[] =
     items.length > 0
       ? items
-      : ARTWORKS.slice(0, 3).map((art, index) => ({
+      : (ARTWORKS.slice(0, 3).map((art, index) => ({
           art,
           holding: {
             id: `demo-${art.id}`,
@@ -1260,7 +1303,7 @@ function PortfolioDashboard({
             status: index === 1 ? "listed" as const : "owned" as const,
             acquiredAt: "2026-05-12T12:00:00.000Z",
           },
-        }));
+        })) as any);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const heldArtIds = new Set(collectionItems.map((item) => item.art.id));
   const artValue = collectionItems.reduce((sum, item) => sum + item.art.price, 0);
@@ -1383,9 +1426,12 @@ function PortfolioDashboard({
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold">{fmt(offer.cash)}</div>
-                    <Link to={`/swap?artId=${match.art.id}&offerId=${offer.id}`} className="text-xs font-semibold text-primary">
+                    <button
+                      onClick={() => onSwapClick?.()}
+                      className="text-xs font-semibold text-primary hover:underline"
+                    >
                       Swap
-                    </Link>
+                    </button>
                   </div>
                 </div>
               </div>

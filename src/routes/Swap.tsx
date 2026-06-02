@@ -45,7 +45,7 @@ export default function SwapPage() {
   function releaseSwapFunds(offer: Offer) {
     if (!user || !ownedHolding) return;
     updateHoldingStatus(ownedHolding.id, "swapped");
-    updateWalletBalance(user.walletBalance + offer.cash);
+    updateWalletBalance(user.wallet_balance + offer.cash);
   }
 
   const matching = useMemo(() => {

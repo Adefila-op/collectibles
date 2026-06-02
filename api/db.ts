@@ -1,115 +1,42 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { kv } from "@vercel/kv";
+import { Pool, PoolClient } from 'pg';
+import * as dotenv from 'dotenv';
 
-interface DBSchema {
-  users: any[];
-  sessions: any[];
-  holdings: any[];
-  offers: any[];
-  swaps: any[];
-  artworks: any[];
-}
+dotenv.config({ path: '.env.local' });
 
-const defaultDB: DBSchema = {
-  users: [],
-  sessions: [],
-  holdings: [],
-  offers: [],
-  swaps: [],
-  artworks: [],
-};
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || 'collectibles_db',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
 
-async function readDB(): Promise<DBSchema> {
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+export async function query(text: string, params?: any[]) {
+  const start = Date.now();
   try {
-    const data = await kv.get("artchain_db");
-    return (data as DBSchema) || defaultDB;
+    const result = await pool.query(text, params);
+    const duration = Date.now() - start;
+    console.log('Executed query', { text, duration, rows: result.rowCount });
+    return result;
   } catch (error) {
-    console.error("Error reading DB from KV:", error);
-    return defaultDB;
+    console.error('Database error', { text, error });
+    throw error;
   }
 }
 
-async function writeDB(db: DBSchema): Promise<void> {
-  try {
-    await kv.set("artchain_db", db);
-  } catch (error) {
-    console.error("Error writing DB to KV:", error);
-  }
+export async function getClient(): Promise<PoolClient> {
+  return pool.connect();
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    if (req.method === "GET") {
-      const { table: getTable, filter: getFilter } = req.query;
-      const db = await readDB();
-      
-      if (getTable && typeof getTable === "string") {
-        let result = db[getTable as keyof DBSchema] || [];
-        
-        if (getFilter) {
-          const filterObj = JSON.parse(getFilter as string);
-          result = result.filter((item: any) =>
-            Object.entries(filterObj).every(([key, value]) => item[key] === value)
-          );
-        }
-        
-        return res.status(200).json(result);
-      }
-      
-      return res.status(200).json(db);
-    }
-
-    if (req.method === "POST") {
-      const { action, table, data, filter } = req.body || {};
-      const db = await readDB();
-
-      if (!table || !(table in db)) {
-        return res.status(400).json({ error: "Invalid table" });
-      }
-
-      const t = db[table as keyof DBSchema];
-
-      if (action === "create") {
-        const newItem = { id: crypto.randomUUID(), ...data };
-        t.push(newItem);
-        await writeDB(db);
-        return res.status(201).json(newItem);
-      }
-
-      if (action === "read") {
-        let result = t;
-        if (filter) {
-          result = t.filter((item: any) =>
-            Object.entries(filter).every(([key, value]) => item[key] === value)
-          );
-        }
-        return res.status(200).json(result);
-      }
-
-      if (action === "update") {
-        const index = t.findIndex((item: any) => item.id === data.id);
-        if (index >= 0) {
-          t[index] = { ...t[index], ...data };
-          await writeDB(db);
-          return res.status(200).json(t[index]);
-        }
-        return res.status(404).json({ error: "Not found" });
-      }
-
-      if (action === "delete") {
-        const index = t.findIndex((item: any) => item.id === data.id);
-        if (index >= 0) {
-          const deleted = t.splice(index, 1)[0];
-          await writeDB(db);
-          return res.status(200).json(deleted);
-        }
-        return res.status(404).json({ error: "Not found" });
-      }
-    }
-
-    return res.status(400).json({ error: "Invalid request" });
-  } catch (error) {
-    console.error("API Error:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
+export async function closePool() {
+  await pool.end();
 }
+
+export default pool;
+

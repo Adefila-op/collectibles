@@ -1,5 +1,6 @@
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
+import { CheckoutModalDesktop } from "@/components/modals/CheckoutModalDesktop";
 import { getArt, fmt } from "@/lib/art-data";
 import { ArrowLeft, Lock } from "lucide-react";
 import { useState } from "react";
@@ -15,6 +16,7 @@ export default function Checkout() {
   const [method, setMethod] = useState("Bank");
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState("");
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
 
   const handleCheckout = async () => {
     if (!user) {
@@ -27,7 +29,7 @@ export default function Checkout() {
     try {
       const result = purchaseArt(user.id, a.id, a.price + fee);
       if (result.success) {
-        updateWalletBalance(user.walletBalance - (a.price + fee));
+        updateWalletBalance(user.wallet_balance - (a.price + fee));
         setMessage("Purchase successful. Artwork added to your collection.");
         navigate("/profile");
       } else {
@@ -41,8 +43,23 @@ export default function Checkout() {
   };
 
   return (
-    <AppFrame label="Checkout · Escrow">
-      <div className="space-y-4 px-5 pt-3 pb-6">
+    <>
+      <AppFrame
+        label="Checkout · Escrow"
+        desktop={
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+            <CheckoutModalDesktop
+              open={true}
+              onOpenChange={(open) => {
+                if (!open) navigate("/explore");
+              }}
+              artId={id!}
+              onSuccess={() => navigate("/profile")}
+            />
+          </div>
+        }
+      >
+        <div className="space-y-4 px-5 pt-3 pb-6">
         <div className="flex items-center gap-3">
           <Link
             to={`/art/${id}`}
@@ -114,6 +131,7 @@ export default function Checkout() {
           {isProcessing ? "Processing..." : `Confirm & pay ${fmt(a.price + fee)}`}
         </button>
       </div>
-    </AppFrame>
+      </AppFrame>
+    </>
   );
 }

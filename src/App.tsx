@@ -11,6 +11,7 @@ import Offer from "@/routes/Offer";
 import BuyArt from "@/routes/BuyArt";
 import ArtistProfile from "@/routes/ArtistProfile";
 import Admin from "@/routes/Admin";
+import AdminDashboard from "@/routes/AdminDashboard";
 
 function NotFound() {
   return (
@@ -45,11 +46,13 @@ export default function App() {
           <Route path="/checkout/:id" element={<Checkout />} />
           <Route path="/explore" element={<Explore />} />
           <Route path="/list" element={<List />} />
+          <Route path="/list/:artId" element={<List />} />
           <Route path="/swap" element={<Swap />} />
           <Route path="/offer" element={<Offer />} />
           <Route path="/buy" element={<BuyArt />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/dipo" element={<AdminDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

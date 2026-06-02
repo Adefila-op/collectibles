@@ -1,11 +1,11 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { Camera, Sparkles, Zap } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { topOfferForCategory } from "@/lib/offers-data";
-import { fmt } from "@/lib/art-data";
+import { fmt, getArt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { addHolding, updateHoldingStatus, addArtwork, fileToBase64 } from "@/lib/db";
+import { addHolding, updateHoldingStatus, addArtwork, fileToBase64, getHoldings } from "@/lib/db";
 
 interface ListingForm {
   title: string;
@@ -22,8 +22,15 @@ interface ListingForm {
 export default function ListArt() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { artId } = useParams<{ artId: string }>();
+  
+  // IMPORTANT: All hooks must be called unconditionally, before any early returns
+  // Initialize all state hooks first to maintain consistent hook order
   const [step, setStep] = useState(0);
   const [imageData, setImageData] = useState<string>("");
+  const [listPrice, setListPrice] = useState<string>("");
+  const [acceptSwaps, setAcceptSwaps] = useState(true);
+  const [proof, setProof] = useState(true);
   const [form, setForm] = useState<ListingForm>({
     title: "Harmattan Haze",
     category: "Painting",
@@ -35,10 +42,77 @@ export default function ListArt() {
     location: "Lagos, Nigeria",
     acceptSwaps: true,
   });
-  const [proof, setProof] = useState(true);
-  const topOffer = topOfferForCategory("Painting");
+  
+  // Check if this is a reselling flow (artId provided) or new creation
+  const isReselling = !!artId;
+  const resellArt = artId ? getArt(artId) : null;
+  const userHoldings = user ? getHoldings(user.id) : [];
+  const ownedArtwork = resellArt && userHoldings.find(h => h.artId === resellArt.id && h.status === "owned");
+  
+  // Update form with resell artwork data if applicable
+  useEffect(() => {
+    if (resellArt) {
+      setForm(prev => ({
+        ...prev,
+        title: resellArt.name,
+        category: resellArt.category,
+        year: resellArt.year.toString(),
+        price: resellArt.price.toString(),
+        location: resellArt.city + ", Nigeria",
+      }));
+      setListPrice(resellArt.price.toString());
+    }
+  }, [resellArt]);
+  
+  // Only require artist status for creating NEW artworks
+  // Allow collectors to resell verified artworks without artist status
+  if (!user) {
+    return (
+      <AppFrame label="Please sign in">
+        <div className="px-5 pt-6 pb-6">
+          <div className="rounded-3xl bg-card p-5 text-center shadow-card">
+            <div className="text-4xl mb-3">🔐</div>
+            <h2 className="font-display text-lg font-semibold">Sign in required</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sign in to your account to {isReselling ? "resell" : "list"} artwork.
+            </p>
+            <Link
+              to="/profile"
+              className="mt-5 inline-flex rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-white"
+            >
+              Go to sign in
+            </Link>
+          </div>
+        </div>
+      </AppFrame>
+    );
+  }
 
-  if (!user || user.artistStatus !== "approved") {
+  // If reselling, must own the artwork
+  if (isReselling && !ownedArtwork) {
+    return (
+      <AppFrame label="Artwork not found">
+        <div className="px-5 pt-6 pb-6">
+          <div className="rounded-3xl bg-card p-5 text-center shadow-card">
+            <div className="text-4xl mb-3">❌</div>
+            <h2 className="font-display text-lg font-semibold">Can't resell this artwork</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              You don't own this verified artwork.
+            </p>
+            <Link
+              to="/profile"
+              className="mt-5 inline-flex rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-white"
+            >
+              Back to collection
+            </Link>
+          </div>
+        </div>
+      </AppFrame>
+    );
+  }
+
+  // Only require artist status for creating NEW artworks
+  if (!isReselling && user.artist_status !== "approved") {
     return (
       <AppFrame label="Artist approval required">
         <div className="px-5 pt-6 pb-6">
@@ -48,7 +122,10 @@ export default function ListArt() {
             </div>
             <h2 className="mt-4 font-display text-lg font-semibold">Artist approval required</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Every account starts as a collector. Apply from your profile to unlock artwork uploads.
+              To create new original artwork, you need artist approval. Your account starts as a collector. Apply from your profile to unlock artwork creation.
+            </p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              💡 You can resell verified artworks from your collection without needing artist approval.
             </p>
             <Link
               to="/profile"
@@ -61,6 +138,8 @@ export default function ListArt() {
       </AppFrame>
     );
   }
+  
+  const topOffer = topOfferForCategory(form.category);
 
   const handleInputChange = (field: keyof ListingForm, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -92,6 +171,21 @@ export default function ListArt() {
       const priceNum = parseInt(form.price.replace(/[^0-9]/g, ""));
       if (isNaN(priceNum) || priceNum <= 0) {
         alert("Please enter a valid price");
+        return;
+      }
+      
+      // Handle reselling existing artwork
+      if (isReselling && resellArt && ownedArtwork) {
+        // For reselling, just update the price and mark as listed
+        updateHoldingStatus(ownedArtwork.id, "listed", priceNum);
+        alert("Artwork listed for resale successfully!");
+        navigate("/profile");
+        return;
+      }
+      
+      // For creating new artwork - require image and additional fields
+      if (!imageData) {
+        alert("Please upload an image for your artwork");
         return;
       }
       

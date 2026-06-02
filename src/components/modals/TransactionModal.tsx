@@ -60,8 +60,8 @@ export function TransactionModal({
     setIsProcessing(true);
     setStep("processing");
 
-    setTimeout(() => {
-      const result = updateWalletBalance(remainingBalance);
+    setTimeout(async () => {
+      const result = await updateWalletBalance(remainingBalance);
       setIsProcessing(false);
 
       if (!result.ok) {

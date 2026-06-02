@@ -34,9 +34,9 @@ export function TopUpModal({ open, onOpenChange, requiredAmount = 0 }: TopUpModa
     setIsProcessing(true);
     
     // Simulate payment processing
-    setTimeout(() => {
-      const newBalance = user.walletBalance + amount;
-      const result = updateWalletBalance(newBalance);
+    setTimeout(async () => {
+      const newBalance = (user.walletBalance || 0) + amount;
+      const result = await updateWalletBalance(newBalance);
       
       if (!result.ok) {
         setMessage(result.error);
@@ -67,7 +67,7 @@ export function TopUpModal({ open, onOpenChange, requiredAmount = 0 }: TopUpModa
             <div className="space-y-3 rounded-2xl bg-muted/60 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Current balance</span>
-                <span className="text-lg font-bold text-primary">{fmt(user.walletBalance)}</span>
+                <span className="text-lg font-bold text-primary">{fmt(user.walletBalance || 0)}</span>
               </div>
             </div>
           )}
