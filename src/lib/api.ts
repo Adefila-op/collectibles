@@ -135,6 +135,29 @@ export const holdingsAPI = {
 export const offersAPI = {
   getAll: () => apiCall('/api/offers'),
   getByArtId: (artId: string) => apiCall(`/api/offers/art/${artId}`),
+  create: (buyerId: string, artId: string, amount: number) =>
+    apiCall('/api/offers', {
+      method: 'POST',
+      body: JSON.stringify({ buyerId, artId, amount }),
+    }),
+  accept: (offerId: string, sellerId: string) =>
+    apiCall(`/api/offers/${offerId}/accept`, {
+      method: 'PATCH',
+      body: JSON.stringify({ sellerId }),
+    }),
+  reject: (offerId: string) =>
+    apiCall(`/api/offers/${offerId}/reject`, {
+      method: 'PATCH',
+    }),
+};
+
+// Direct Purchase API
+export const purchaseAPI = {
+  buy: (buyerId: string, artId: string, amount: number, sellerId: string) =>
+    apiCall('/api/buy', {
+      method: 'POST',
+      body: JSON.stringify({ buyerId, artId, amount, sellerId }),
+    }),
 };
 
 // Transactions API

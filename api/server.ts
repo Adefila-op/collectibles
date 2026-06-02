@@ -202,6 +202,385 @@ app.get('/api/offers/art/:artId', async (req: Request, res: Response) => {
   }
 });
 
+// Create offer with escrow
+app.post('/api/offers', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { buyerId, artId, amount } = req.body;
+    
+    if (!buyerId || !artId || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'Missing or invalid offer fields' });
+    }
+
+    // Check buyer has funds
+    const buyerResult = await client.query('SELECT wallet_balance FROM users WHERE id = $1', [buyerId]);
+    if (buyerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Buyer not found' });
+    }
+    if (buyerResult.rows[0].wallet_balance < amount) {
+      return res.status(400).json({ error: 'Insufficient balance for offer' });
+    }
+
+    // Check art exists and get seller info
+    const artResult = await client.query('SELECT * FROM artworks WHERE id = $1', [artId]);
+    if (artResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Artwork not found' });
+    }
+
+    // Get current owner of artwork
+    const holdingResult = await client.query(
+      'SELECT user_id FROM holdings WHERE art_id = $1 AND status = $2 ORDER BY acquired_at DESC LIMIT 1',
+      [artId, 'owned']
+    );
+    const sellerId = holdingResult.rows.length > 0 ? holdingResult.rows[0].user_id : null;
+
+    await client.query('BEGIN');
+
+    // Create offer
+    const offerResult = await client.query(
+      `INSERT INTO offers (buyer_id, art_id, cash, status)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [buyerId, artId, amount, 'pending']
+    );
+    const offer = offerResult.rows[0];
+
+    // Create transaction
+    const txResult = await client.query(
+      `INSERT INTO transactions (type, buyer_id, seller_id, amount, art_id, offer_id, status, details)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      ['offer', buyerId, sellerId, amount, artId, offer.id, 'pending', JSON.stringify({ offerAmount: amount })]
+    );
+    const tx = txResult.rows[0];
+
+    // Create escrow to hold buyer funds
+    const escrowResult = await client.query(
+      `INSERT INTO escrow (transaction_id, amount, from_user_id, to_user_id, art_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [tx.id, amount, buyerId, sellerId, artId, 'held']
+    );
+
+    // Deduct funds from buyer wallet
+    await client.query(
+      'UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2',
+      [amount, buyerId]
+    );
+
+    await client.query('COMMIT');
+    
+    res.status(201).json({
+      offer: offer,
+      transaction: tx,
+      escrow: escrowResult.rows[0],
+      message: 'Offer created. Funds held in escrow.'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Offer creation error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create offer' });
+  } finally {
+    client.release();
+  }
+});
+
+// Accept offer (seller accepts, escrow released to seller)
+app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { offerId } = req.params;
+    const { sellerId } = req.body;
+
+    if (!offerId || !sellerId) {
+      return res.status(400).json({ error: 'Missing offerId or sellerId' });
+    }
+
+    await client.query('BEGIN');
+
+    // Get offer
+    const offerResult = await client.query('SELECT * FROM offers WHERE id = $1 FOR UPDATE', [offerId]);
+    if (offerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Offer not found' });
+    }
+    const offer = offerResult.rows[0];
+
+    // Get transaction
+    const txResult = await client.query(
+      'SELECT * FROM transactions WHERE offer_id = $1 FOR UPDATE',
+      [offerId]
+    );
+    if (txResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    const tx = txResult.rows[0];
+
+    // Get escrow
+    const escrowResult = await client.query(
+      'SELECT * FROM escrow WHERE transaction_id = $1 FOR UPDATE',
+      [tx.id]
+    );
+    if (escrowResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Escrow not found' });
+    }
+    const escrow = escrowResult.rows[0];
+
+    // Calculate fee (10% platform fee)
+    const platformFee = Math.floor(escrow.amount * 0.1);
+    const sellerAmount = escrow.amount - platformFee;
+
+    // Transfer art to buyer
+    const artTransferResult = await client.query(
+      `UPDATE holdings 
+       SET user_id = $1, acquired_at = CURRENT_TIMESTAMP 
+       WHERE art_id = $2 AND user_id = $3 AND status = $4
+       RETURNING *`,
+      [offer.buyer_id, offer.art_id, sellerId, 'owned']
+    );
+
+    if (artTransferResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Artwork not found or seller not owner' });
+    }
+
+    // Release escrow to seller
+    await client.query(
+      'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
+      [sellerAmount, sellerId]
+    );
+
+    // Update escrow status
+    await client.query(
+      `UPDATE escrow SET status = $1, released_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['released', escrow.id]
+    );
+
+    // Update offer status
+    await client.query('UPDATE offers SET status = $1 WHERE id = $2', ['accepted', offerId]);
+
+    // Update transaction status
+    await client.query(
+      `UPDATE transactions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['completed', tx.id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      offer: { ...offer, status: 'accepted' },
+      transaction: { ...tx, status: 'completed' },
+      escrow: { ...escrow, status: 'released' },
+      sellerReceived: sellerAmount,
+      platformFee: platformFee,
+      message: 'Offer accepted. Funds released to seller. Art transferred to buyer.'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Offer acceptance error:', error);
+    res.status(500).json({ error: error.message || 'Failed to accept offer' });
+  } finally {
+    client.release();
+  }
+});
+
+// Reject offer (refund escrow to buyer)
+app.patch('/api/offers/:offerId/reject', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { offerId } = req.params;
+
+    if (!offerId) {
+      return res.status(400).json({ error: 'Missing offerId' });
+    }
+
+    await client.query('BEGIN');
+
+    // Get offer
+    const offerResult = await client.query('SELECT * FROM offers WHERE id = $1 FOR UPDATE', [offerId]);
+    if (offerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Offer not found' });
+    }
+    const offer = offerResult.rows[0];
+
+    // Get transaction
+    const txResult = await client.query(
+      'SELECT * FROM transactions WHERE offer_id = $1 FOR UPDATE',
+      [offerId]
+    );
+    if (txResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    const tx = txResult.rows[0];
+
+    // Get escrow
+    const escrowResult = await client.query(
+      'SELECT * FROM escrow WHERE transaction_id = $1 FOR UPDATE',
+      [tx.id]
+    );
+    if (escrowResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Escrow not found' });
+    }
+    const escrow = escrowResult.rows[0];
+
+    // Refund buyer
+    await client.query(
+      'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
+      [escrow.amount, offer.buyer_id]
+    );
+
+    // Update escrow status
+    await client.query(
+      `UPDATE escrow SET status = $1, released_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['refunded', escrow.id]
+    );
+
+    // Update offer status
+    await client.query('UPDATE offers SET status = $1 WHERE id = $2', ['rejected', offerId]);
+
+    // Update transaction status
+    await client.query(
+      `UPDATE transactions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['refunded', tx.id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      offer: { ...offer, status: 'rejected' },
+      transaction: { ...tx, status: 'refunded' },
+      escrow: { ...escrow, status: 'refunded' },
+      buyerRefunded: escrow.amount,
+      message: 'Offer rejected. Funds refunded to buyer.'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Offer rejection error:', error);
+    res.status(500).json({ error: error.message || 'Failed to reject offer' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== Direct Purchase API (with Escrow) ==========
+
+// Direct buy artwork (not an offer - immediate purchase)
+app.post('/api/buy', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { buyerId, artId, amount, sellerId } = req.body;
+    
+    if (!buyerId || !artId || !amount || !sellerId || amount <= 0) {
+      return res.status(400).json({ error: 'Missing or invalid purchase fields' });
+    }
+
+    // Check buyer has funds
+    const buyerResult = await client.query('SELECT wallet_balance FROM users WHERE id = $1', [buyerId]);
+    if (buyerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Buyer not found' });
+    }
+    if (buyerResult.rows[0].wallet_balance < amount) {
+      return res.status(400).json({ error: 'Insufficient balance for purchase' });
+    }
+
+    // Check seller exists
+    const sellerResult = await client.query('SELECT id FROM users WHERE id = $1', [sellerId]);
+    if (sellerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Seller not found' });
+    }
+
+    // Check art exists and seller owns it
+    const artResult = await client.query('SELECT * FROM artworks WHERE id = $1', [artId]);
+    if (artResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Artwork not found' });
+    }
+
+    const holdingResult = await client.query(
+      'SELECT * FROM holdings WHERE art_id = $1 AND user_id = $2 AND status = $3',
+      [artId, sellerId, 'owned']
+    );
+    if (holdingResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Seller does not own this artwork or it is not for sale' });
+    }
+
+    await client.query('BEGIN');
+
+    // Create transaction
+    const txResult = await client.query(
+      `INSERT INTO transactions (type, buyer_id, seller_id, amount, art_id, status, details)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      ['buy', buyerId, sellerId, amount, artId, 'pending', JSON.stringify({ purchaseAmount: amount })]
+    );
+    const tx = txResult.rows[0];
+
+    // Create escrow to hold buyer funds
+    const escrowResult = await client.query(
+      `INSERT INTO escrow (transaction_id, amount, from_user_id, to_user_id, art_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [tx.id, amount, buyerId, sellerId, artId, 'held']
+    );
+
+    // Deduct funds from buyer wallet
+    await client.query(
+      'UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2',
+      [amount, buyerId]
+    );
+
+    // Transfer art to buyer immediately (direct purchase, no seller approval needed)
+    await client.query(
+      `UPDATE holdings 
+       SET user_id = $1, acquired_at = CURRENT_TIMESTAMP 
+       WHERE art_id = $2 AND user_id = $3 AND status = $4`,
+      [buyerId, artId, sellerId, 'owned']
+    );
+
+    // Calculate fee (10% platform fee)
+    const platformFee = Math.floor(amount * 0.1);
+    const sellerAmount = amount - platformFee;
+
+    // Release escrow to seller immediately (auto-complete for direct purchase)
+    await client.query(
+      'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
+      [sellerAmount, sellerId]
+    );
+
+    // Update escrow status
+    await client.query(
+      `UPDATE escrow SET status = $1, released_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['released', escrowResult.rows[0].id]
+    );
+
+    // Update transaction status
+    await client.query(
+      `UPDATE transactions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['completed', tx.id]
+    );
+
+    await client.query('COMMIT');
+    
+    res.status(201).json({
+      transaction: { ...tx, status: 'completed' },
+      escrow: { ...escrowResult.rows[0], status: 'released' },
+      sellerReceived: sellerAmount,
+      platformFee: platformFee,
+      message: 'Purchase successful. Art transferred and funds released to seller.'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Purchase error:', error);
+    res.status(500).json({ error: error.message || 'Failed to complete purchase' });
+  } finally {
+    client.release();
+  }
+});
+
 // ========== Transactions API ==========
 
 // Get transaction history

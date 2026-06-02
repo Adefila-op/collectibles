@@ -3,23 +3,34 @@ import { AppFrame } from "@/components/AppFrame";
 import { CheckoutModalDesktop } from "@/components/modals/CheckoutModalDesktop";
 import { getArt, fmt } from "@/lib/art-data";
 import { ArrowLeft, Lock } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { purchaseArt } from "@/lib/db";
+import { getHoldings } from "@/lib/db";
+import { purchaseAPI } from "@/lib/api";
 
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, updateWalletBalance } = useAuth();
+  const { user } = useAuth();
   const a = getArt(id!);
   const fee = Math.round(a.price * 0.02);
   const [method, setMethod] = useState("Bank");
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState("");
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [sellerId, setSellerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Find who currently owns the art
+    const holdings = getHoldings();
+    const ownership = holdings.find((h) => h.artId === id && h.status === 'owned');
+    if (ownership) {
+      setSellerId(ownership.userId);
+    }
+  }, [id]);
 
   const handleCheckout = async () => {
-    if (!user) {
+    if (!user || !sellerId) {
       navigate("/profile");
       return;
     }
@@ -27,20 +38,31 @@ export default function Checkout() {
     setMessage("");
     setIsProcessing(true);
     try {
-      const result = purchaseArt(user.id, a.id, a.price + fee);
-      if (result.success) {
-        updateWalletBalance(user.wallet_balance - (a.price + fee));
-        setMessage("Purchase successful. Artwork added to your collection.");
-        navigate("/profile");
-      } else {
-        setMessage(result.error);
-      }
-    } catch (error) {
-      setMessage("Error processing payment. Please try again.");
+      const result = await purchaseAPI.buy(user.id, id!, a.price + fee, sellerId);
+      setMessage("✓ Purchase successful. Artwork added to your collection.");
+      setTimeout(() => navigate("/profile"), 2000);
+    } catch (error: any) {
+      setMessage(error.message || "Error processing payment. Please try again.");
     } finally {
       setIsProcessing(false);
     }
   };
+
+  if (!sellerId) {
+    return (
+      <AppFrame label="Checkout">
+        <div className="space-y-4 px-5 pt-3 pb-6 text-center">
+          <p className="text-sm text-muted-foreground">Artwork not available for purchase</p>
+          <Link
+            to="/buy"
+            className="mt-4 inline-block rounded-2xl bg-primary-grad px-4 py-3 text-sm font-semibold text-white shadow-glow"
+          >
+            Back to Shop
+          </Link>
+        </div>
+      </AppFrame>
+    );
+  }
 
   return (
     <>
@@ -113,12 +135,12 @@ export default function Checkout() {
         </div>
 
         <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3 text-xs text-primary">
-          <Lock className="mr-1 inline h-3.5 w-3.5" /> Funds held in escrow until vault audit
+          <Lock className="mr-1 inline h-3.5 w-3.5" /> Funds held in escrow until transaction
           completes.
         </div>
 
         {message && (
-          <div className="rounded-2xl bg-primary/10 p-3 text-xs font-semibold text-primary">
+          <div className={`rounded-2xl p-3 text-xs font-semibold ${message.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-600' : 'bg-primary/10 text-primary'}`}>
             {message}
           </div>
         )}

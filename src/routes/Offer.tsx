@@ -2,13 +2,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { getArt, fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { createOffer } from "@/lib/db";
+import { offersAPI } from "@/lib/api";
 import { ArrowLeft, Send } from "lucide-react";
 import { useState } from "react";
 
 export default function OfferPage() {
   const navigate = useNavigate();
-  const { user, updateWalletBalance } = useAuth();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const targetArtId = searchParams.get("artId");
   const targetArt = targetArtId ? getArt(targetArtId) : null;
@@ -50,7 +50,7 @@ export default function OfferPage() {
 
   async function handlePlaceOffer() {
     if (!user || !targetArt || !targetArtId) return;
-    if (isSubmitting) return; // Prevent double submission
+    if (isSubmitting) return;
 
     const amount = parseInt(offerAmount.replace(/[^0-9]/g, ""));
     if (Number.isNaN(amount) || amount <= 0) {
@@ -59,25 +59,18 @@ export default function OfferPage() {
     }
 
     if (amount > (user.walletBalance as number)) {
-      setMessage("Deposit more funds before placing an offer this large.");
+      setMessage("Insufficient balance. Deposit more funds to place this offer.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      createOffer(targetArtId, user.id, amount);
+      const result = await offersAPI.create(user.id, targetArtId, amount);
       
-      // Deduct from wallet balance
-      const remainingBalance = (user.walletBalance || 0) - amount;
-      const result = await updateWalletBalance(remainingBalance);
-      
-      if (!result.ok) {
-        setMessage(result.error);
-        return;
-      }
-
-      setMessage(`Offer placed for ${fmt(amount)} on ${targetArt.name}.`);
-      setTimeout(() => navigate("/explore"), 1500);
+      setMessage(`✓ Offer placed for ${fmt(amount)}. Funds held in escrow.`);
+      setTimeout(() => navigate("/explore"), 2000);
+    } catch (error: any) {
+      setMessage(error.message || "Failed to place offer. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -126,7 +119,7 @@ export default function OfferPage() {
         </div>
 
         {message && (
-          <div className="rounded-2xl bg-primary/10 p-3 text-xs font-semibold text-primary">
+          <div className={`rounded-2xl p-3 text-xs font-semibold ${message.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-600' : 'bg-primary/10 text-primary'}`}>
             {message}
           </div>
         )}
