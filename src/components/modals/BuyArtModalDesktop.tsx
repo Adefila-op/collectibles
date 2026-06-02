@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
 import { getAllArtworks, fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TransactionModal } from "./TransactionModal";
 
 interface BuyArtModalProps {
   open: boolean;
@@ -17,6 +18,8 @@ interface BuyArtModalProps {
 }
 
 export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
+  const [transactionOpen, setTransactionOpen] = useState(false);
+  const [selectedArt, setSelectedArt] = useState<{ id: string; name: string; price: number } | null>(null);
   const { user } = useAuth();
 
   const allArtworks = getAllArtworks();
@@ -56,11 +59,13 @@ export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {availableForPurchase.map((a) => (
-                <Link
+                <button
                   key={a.id}
-                  to={`/checkout/${a.id}`}
-                  onClick={() => onOpenChange(false)}
-                  className="group overflow-hidden rounded-2xl border border-border bg-card shadow-card hover-lift"
+                  onClick={() => {
+                    setSelectedArt({ id: a.id, name: a.name, price: a.price });
+                    setTransactionOpen(true);
+                  }}
+                  className="group overflow-hidden rounded-2xl border border-border bg-card shadow-card hover-lift text-left"
                 >
                   <div className="relative aspect-square overflow-hidden">
                     <img
@@ -77,11 +82,24 @@ export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
                     </div>
                     <div className="mt-1 text-xs font-semibold text-primary">{fmt(a.price)}</div>
                   </div>
-                </Link>
+                </button>
               ))}
             </div>
           )}
         </div>
+
+        {selectedArt && (
+          <TransactionModal
+            open={transactionOpen}
+            onOpenChange={setTransactionOpen}
+            artName={selectedArt.name}
+            price={selectedArt.price}
+            onConfirm={() => {
+              setSelectedArt(null);
+              onOpenChange(false);
+            }}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

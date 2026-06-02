@@ -176,9 +176,9 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[500px] rounded-3xl border-0 max-h-[85vh] overflow-y-auto">
+      <DialogContent className="!left-auto !right-0 !top-0 h-dvh max-h-dvh w-full max-w-[520px] !translate-x-0 !translate-y-0 overflow-y-auto rounded-none border-0 p-6 sm:rounded-l-3xl sm:rounded-r-none">
         <DialogHeader>
-          <DialogTitle>List your artwork</DialogTitle>
+          <DialogTitle>List NFT artwork</DialogTitle>
           <DialogDescription>
             {step === 0 ? "Upload photos and details" : "Set your price"}
           </DialogDescription>

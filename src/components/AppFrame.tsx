@@ -9,6 +9,7 @@ import { BuyArtModalDesktop } from "./modals/BuyArtModalDesktop";
 import { OfferModalDesktop } from "./modals/OfferModalDesktop";
 import { SwapModalDesktop } from "./modals/SwapModalDesktop";
 import { ListingModalDesktop } from "./modals/ListingModalDesktop";
+import { TopUpModal } from "./modals/TopUpModal";
 
 export function AppFrame({
   children,
@@ -24,6 +25,7 @@ export function AppFrame({
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [listingModalOpen, setListingModalOpen] = useState(false);
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
   if (desktop) {
     return (
       <div className="min-h-screen bg-background text-foreground lg:bg-[#0759e8]">
@@ -160,9 +162,10 @@ export function AppFrame({
 
       {/* Desktop Modals */}
       <BuyArtModalDesktop open={buyModalOpen} onOpenChange={setBuyModalOpen} />
-      <OfferModalDesktop open={offerModalOpen} onOpenChange={setOfferModalOpen} />
+      <OfferModalDesktop open={offerModalOpen} onOpenChange={setOfferModalOpen} onTopUpClick={() => setTopUpModalOpen(true)} />
       <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
       <ListingModalDesktop open={listingModalOpen} onOpenChange={setListingModalOpen} />
+      <TopUpModal open={topUpModalOpen} onOpenChange={setTopUpModalOpen} />
     </div>
   );
 }

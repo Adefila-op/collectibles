@@ -16,14 +16,16 @@ interface OfferModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   artId?: string;
+  onTopUpClick?: () => void;
 }
 
-export function OfferModalDesktop({ open, onOpenChange, artId }: OfferModalProps) {
+export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: OfferModalProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateWalletBalance } = useAuth();
   const targetArt = artId ? getArt(artId) : null;
   const [offerAmount, setOfferAmount] = useState(targetArt ? String(targetArt.price) : "");
   const [message, setMessage] = useState("");
+  const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
 
   if (!user) {
     return (
@@ -72,11 +74,22 @@ export function OfferModalDesktop({ open, onOpenChange, artId }: OfferModalProps
     }
 
     if (amount > user.walletBalance) {
-      setMessage("Deposit more funds before placing an offer this large.");
+      setShowInsufficientBalance(true);
       return;
     }
 
+    // Create the offer
     createOffer(artId, user.id, amount);
+    
+    // Deduct from wallet balance
+    const remainingBalance = user.walletBalance - amount;
+    const result = updateWalletBalance(remainingBalance);
+    
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+
     setMessage(`Offer placed for ${fmt(amount)} on ${targetArt.name}.`);
     setTimeout(() => {
       onOpenChange(false);
@@ -124,7 +137,25 @@ export function OfferModalDesktop({ open, onOpenChange, artId }: OfferModalProps
             </div>
           </div>
 
-          {message && (
+          {showInsufficientBalance ? (
+            <div className="rounded-2xl bg-red-500/10 p-4 text-sm space-y-3">
+              <div className="text-red-700 font-semibold">
+                Insufficient Balance
+              </div>
+              <div className="text-red-600 text-xs">
+                You need {fmt(parseInt(offerAmount.replace(/[^0-9]/g, "") || "0") - user.walletBalance)} more to place this offer.
+              </div>
+              <button
+                onClick={() => {
+                  onTopUpClick?.();
+                  setShowInsufficientBalance(false);
+                }}
+                className="w-full rounded-2xl bg-primary px-4 py-2 text-xs font-semibold text-white transition hover:bg-primary/90"
+              >
+                Top Up Wallet
+              </button>
+            </div>
+          ) : message ? (
             <div
               className={`rounded-2xl p-3 text-sm ${
                 message.includes("Offer placed")
@@ -134,7 +165,7 @@ export function OfferModalDesktop({ open, onOpenChange, artId }: OfferModalProps
             >
               {message}
             </div>
-          )}
+          ) : null}
 
           <div className="flex gap-2 pt-2">
             <button

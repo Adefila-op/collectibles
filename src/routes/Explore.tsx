@@ -17,11 +17,13 @@ import {
   Bell,
   Bookmark,
   CalendarDays,
+  CreditCard,
   Heart,
   Home as HomeIcon,
   MapPin,
   MessageCircle,
   PackageCheck,
+  Palette,
   Plus,
   Repeat2,
   Search,
@@ -35,12 +37,16 @@ import {
   UserRound,
   Wallet,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings, type UserHolding } from "@/lib/db";
 import { BuyArtModal } from "@/components/modals/BuyArtModal";
 import { OfferModal } from "@/components/modals/OfferModal";
 import { SwapModal } from "@/components/modals/SwapModal";
+import { AuthModal } from "@/components/AuthModal";
+import { TransactionModal } from "@/components/modals/TransactionModal";
+import { ListingModalDesktop } from "@/components/modals/ListingModalDesktop";
+import { TopUpModal } from "@/components/modals/TopUpModal";
 
 type DashboardSection = "explore" | "portfolio" | "artists";
 const dashboardSections: DashboardSection[] = ["explore", "portfolio", "artists"];
@@ -57,7 +63,7 @@ function walletAddressForUser(userId: string) {
 }
 
 export default function Explore() {
-  const { user, updateWalletBalance } = useAuth();
+  const { user, updateWalletBalance, submitArtistApplication } = useAuth();
   const initialSection = new URLSearchParams(window.location.search).get("section");
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -73,6 +79,16 @@ export default function Explore() {
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [offerArtId, setOfferArtId] = useState<string>();
   const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [transactionOpen, setTransactionOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [artistGateOpen, setArtistGateOpen] = useState(false);
+  const [listingModalOpen, setListingModalOpen] = useState(false);
+  const [topUpOpen, setTopUpOpen] = useState(false);
+  const [topUpRequestKey, setTopUpRequestKey] = useState(0);
+  const [selectedArtForTransaction, setSelectedArtForTransaction] = useState<{ id: string; name: string; price: number } | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    { type: "buy"; art: Art } | { type: "offer"; artId: string } | { type: "topup" } | { type: "list" } | null
+  >(null);
 
   const allArtworks = useMemo(() => getAllArtworks(), []);
   const userHoldings = user ? getHoldings(user.id) : [];
@@ -83,6 +99,87 @@ export default function Explore() {
     const nextUrl = section === "explore" ? "/explore" : `/explore?section=${section}`;
     window.history.replaceState(null, "", nextUrl);
   }
+
+  function handleBuyClick(art: Art) {
+    if (!user) {
+      setPendingAction({ type: "buy", art });
+      setAuthModalOpen(true);
+      return;
+    }
+
+    setSelectedArtForTransaction({ id: art.id, name: art.name, price: art.price });
+    setTransactionOpen(true);
+  }
+
+  function handleOfferClick(artId: string) {
+    if (!user) {
+      setPendingAction({ type: "offer", artId });
+      setAuthModalOpen(true);
+      return;
+    }
+
+    setOfferArtId(artId);
+    setOfferModalOpen(true);
+  }
+
+  function handleTopUpClick() {
+    if (!user) {
+      setPendingAction({ type: "topup" });
+      setAuthModalOpen(true);
+      return;
+    }
+
+    setTopUpRequestKey((key) => key + 1);
+    setTopUpOpen(true);
+  }
+
+  function handleListArtClick() {
+    if (!user) {
+      setPendingAction({ type: "list" });
+      setAuthModalOpen(true);
+      return;
+    }
+
+    if (user.artistStatus === "approved") {
+      setListingModalOpen(true);
+      return;
+    }
+
+    setArtistGateOpen(true);
+  }
+
+  useEffect(() => {
+    if (!user || !pendingAction) return;
+
+    if (pendingAction.type === "buy") {
+      setSelectedArtForTransaction({
+        id: pendingAction.art.id,
+        name: pendingAction.art.name,
+        price: pendingAction.art.price,
+      });
+      setTransactionOpen(true);
+    } else if (pendingAction.type === "offer") {
+      setOfferArtId(pendingAction.artId);
+      setOfferModalOpen(true);
+    } else if (pendingAction.type === "topup") {
+      setTopUpRequestKey((key) => key + 1);
+    } else if (pendingAction.type === "list") {
+      if (user.artistStatus === "approved") {
+        setListingModalOpen(true);
+      } else {
+        setArtistGateOpen(true);
+      }
+    }
+
+    setPendingAction(null);
+    setAuthModalOpen(false);
+  }, [pendingAction, user]);
+
+  useEffect(() => {
+    if (!authModalOpen && !user) {
+      setPendingAction(null);
+    }
+  }, [authModalOpen, user]);
 
   const filteredArtworks = useMemo(() => {
     let results = allArtworks;
@@ -121,36 +218,81 @@ export default function Explore() {
     return results;
   }, [allArtworks, searchQuery, selectedCategory, selectedCity, selectedStatus, priceRange, userOwnedArtIds]);
 
-  return (
-    <AppFrame
-      label="Explore · Filters"
-      desktop={
-        <DesktopMarketplace
-          artworks={filteredArtworks}
-          allArtworks={allArtworks}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          selectedCategory={selectedCategory}
-          onCategoryChange={setSelectedCategory}
-          selectedCity={selectedCity}
-          onCityChange={setSelectedCity}
-          selectedStatus={selectedStatus}
-          onStatusChange={setSelectedStatus}
-          priceRange={priceRange}
-          onPriceRangeChange={setPriceRange}
-          activeSection={activeSection}
-          onSectionChange={handleSectionChange}
-          userOwnedArtIds={userOwnedArtIds}
-          userHoldings={userHoldings}
-          userName={user?.name || "Kwame Mensah"}
-          userId={user?.id || "demo-user"}
-          walletBalance={user?.walletBalance || 1240500}
-          onWalletBalanceChange={updateWalletBalance}
-          initials={user?.avatar || "KM"}
+  const modals = (
+    <>
+      <AuthModal
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+      />
+      <BuyArtModal open={buyModalOpen} onOpenChange={setBuyModalOpen} />
+      <OfferModal open={offerModalOpen} onOpenChange={setOfferModalOpen} artId={offerArtId} />
+      <SwapModal open={swapModalOpen} onOpenChange={setSwapModalOpen} />
+      <ArtistApplicationGateModal
+        open={artistGateOpen}
+        onOpenChange={setArtistGateOpen}
+        artistStatus={user?.artistStatus ?? "collector"}
+        onSubmit={submitArtistApplication}
+      />
+      <ListingModalDesktop open={listingModalOpen} onOpenChange={setListingModalOpen} />
+      <TopUpModal open={topUpOpen} onOpenChange={setTopUpOpen} />
+      {selectedArtForTransaction && (
+        <TransactionModal
+          open={transactionOpen}
+          onOpenChange={(open) => {
+            setTransactionOpen(open);
+            if (!open) setSelectedArtForTransaction(null);
+          }}
+          artName={selectedArtForTransaction.name}
+          price={selectedArtForTransaction.price}
+          onConfirm={() => {
+            setSelectedArtForTransaction(null);
+          }}
+          onTopUpClick={handleTopUpClick}
         />
-      }
-    >
-      <div className="space-y-4 px-5 pt-3 pb-6">
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <AppFrame
+        label="Explore · Filters"
+        desktop={
+          <>
+            <DesktopMarketplace
+              artworks={filteredArtworks}
+              allArtworks={allArtworks}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+              selectedCity={selectedCity}
+              onCityChange={setSelectedCity}
+              selectedStatus={selectedStatus}
+              onStatusChange={setSelectedStatus}
+              priceRange={priceRange}
+              onPriceRangeChange={setPriceRange}
+              activeSection={activeSection}
+              onSectionChange={handleSectionChange}
+              userOwnedArtIds={userOwnedArtIds}
+              userHoldings={userHoldings}
+              userName={user?.name || "Kwame Mensah"}
+              userId={user?.id || "demo-user"}
+              walletBalance={user?.walletBalance || 1240500}
+              onWalletBalanceChange={updateWalletBalance}
+              initials={user?.avatar || "KM"}
+              onBuyClick={handleBuyClick}
+              onOfferClick={handleOfferClick}
+              isLoggedIn={Boolean(user)}
+              artistStatus={user?.artistStatus ?? "collector"}
+              onTopUpClick={handleTopUpClick}
+              topUpRequestKey={topUpRequestKey}
+              onListArtClick={handleListArtClick}
+            />
+          </>
+        }
+      >
+        <div className="space-y-4 px-5 pt-3 pb-6">
         <h2 className="font-display text-xl font-semibold">Explore</h2>
         <div className="flex gap-2">
           <input
@@ -346,12 +488,145 @@ export default function Explore() {
           </div>
         )}
 
-        {/* Modals */}
-        <BuyArtModal open={buyModalOpen} onOpenChange={setBuyModalOpen} />
-        <OfferModal open={offerModalOpen} onOpenChange={setOfferModalOpen} artId={offerArtId} />
-        <SwapModal open={swapModalOpen} onOpenChange={setSwapModalOpen} />
-      </div>
-    </AppFrame>
+        </div>
+      </AppFrame>
+      {modals}
+    </>
+  );
+}
+
+function ArtistApplicationGateModal({
+  open,
+  onOpenChange,
+  artistStatus,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  artistStatus: "collector" | "pending" | "approved";
+  onSubmit: (data: {
+    artistType: string;
+    artistBio: string;
+    portfolioUrl: string;
+    socialUrl: string;
+    liveLocation: string;
+    callUrl: string;
+  }) => { ok: true } | { ok: false; error: string };
+}) {
+  const [artistForm, setArtistForm] = useState({
+    artistType: "Painter",
+    artistBio: "",
+    portfolioUrl: "",
+    socialUrl: "",
+    liveLocation: "Lagos, Nigeria",
+    callUrl: "",
+  });
+  const [artistMessage, setArtistMessage] = useState("");
+
+  function handleArtistApply() {
+    if (!artistForm.artistType || !artistForm.artistBio || !artistForm.portfolioUrl) {
+      setArtistMessage("Artist type, bio, and portfolio are required.");
+      return;
+    }
+
+    const result = onSubmit(artistForm);
+    setArtistMessage(result.ok ? "Application submitted. Your account stays collector-only until approval." : result.error);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[430px] overflow-hidden rounded-3xl border-0 p-0">
+        <div className="bg-primary-grad p-5 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-left text-xl">
+              {artistStatus === "pending" ? "Artist review pending" : "Apply as artist"}
+            </DialogTitle>
+            <DialogDescription className="text-left text-white/75">
+              {artistStatus === "pending"
+                ? "Your account is still collector-only while approval is reviewed."
+                : "Listing NFTs is available after artist approval."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 flex items-center gap-3 rounded-2xl bg-white/10 p-3 text-xs">
+            <Palette className="h-4 w-4" />
+            Current account: {artistStatus === "pending" ? "Collector, artist pending" : "Collector"}
+          </div>
+        </div>
+
+        {artistStatus === "pending" ? (
+          <div className="space-y-3 p-5">
+            <p className="text-sm leading-6 text-muted-foreground">
+              You can continue collecting now. Once approval is complete, this button will open the NFT listing form.
+            </p>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="w-full rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-glow"
+            >
+              Got it
+            </button>
+          </div>
+        ) : (
+          <div className="max-h-[68vh] space-y-3 overflow-y-auto p-5">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Artist type</label>
+              <select
+                value={artistForm.artistType}
+                onChange={(event) => setArtistForm((prev) => ({ ...prev, artistType: event.target.value }))}
+                className="mt-2 w-full rounded-2xl bg-muted px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {["Painter", "Sculptor", "Textile artist", "Photographer", "Mixed media"].map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Artist bio</label>
+              <textarea
+                value={artistForm.artistBio}
+                onChange={(event) => setArtistForm((prev) => ({ ...prev, artistBio: event.target.value }))}
+                placeholder="Tell collectors about your practice, materials, and exhibitions."
+                className="mt-2 min-h-24 w-full rounded-2xl bg-muted px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            {[
+              ["Portfolio link", "portfolioUrl", "https://your-portfolio.com"],
+              ["Social link", "socialUrl", "https://instagram.com/..."],
+              ["Live location", "liveLocation", "City, Country"],
+              ["Book a live call", "callUrl", "https://cal.com/..."],
+            ].map(([label, key, placeholder]) => (
+              <div key={key}>
+                <label className="text-xs font-semibold text-muted-foreground">{label}</label>
+                <input
+                  value={artistForm[key as keyof typeof artistForm]}
+                  onChange={(event) => setArtistForm((prev) => ({ ...prev, [key]: event.target.value }))}
+                  placeholder={placeholder}
+                  className="mt-2 w-full rounded-2xl bg-muted px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+            ))}
+
+            {artistMessage && (
+              <div
+                className={`rounded-2xl p-3 text-xs font-semibold ${
+                  artistMessage.includes("submitted") ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-700"
+                }`}
+              >
+                {artistMessage}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleArtistApply}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-semibold text-white shadow-glow"
+            >
+              <CalendarDays className="h-4 w-4" /> Submit for approval
+            </button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -377,6 +652,13 @@ function DesktopMarketplace({
   walletBalance,
   onWalletBalanceChange,
   initials,
+  onBuyClick,
+  onOfferClick,
+  isLoggedIn,
+  artistStatus,
+  onTopUpClick,
+  topUpRequestKey,
+  onListArtClick,
 }: {
   artworks: Art[];
   allArtworks: Art[];
@@ -399,9 +681,20 @@ function DesktopMarketplace({
   walletBalance: number;
   onWalletBalanceChange: (nextBalance: number) => { ok: true } | { ok: false; error: string };
   initials: string;
+  onBuyClick: (art: Art) => void;
+  onOfferClick: (artId: string) => void;
+  isLoggedIn: boolean;
+  artistStatus: "collector" | "pending" | "approved";
+  onTopUpClick: () => void;
+  topUpRequestKey: number;
+  onListArtClick: () => void;
 }) {
   const [depositOpen, setDepositOpen] = useState(false);
+  const [depositMethod, setDepositMethod] = useState<"crypto" | "card">("crypto");
   const [depositAmount, setDepositAmount] = useState("100");
+  const [depositCardNumber, setDepositCardNumber] = useState("");
+  const [depositCardExpiry, setDepositCardExpiry] = useState("");
+  const [depositCardCvv, setDepositCardCvv] = useState("");
   const [network, setNetwork] = useState<(typeof NETWORKS)[number]>("Base");
   const [depositMessage, setDepositMessage] = useState("");
   const categories = ["Painting", "Sculpture", "Textile", "Beadwork", "Photo"];
@@ -440,16 +733,49 @@ function DesktopMarketplace({
   }));
 
   function handleDeposit() {
+    if (!isLoggedIn) {
+      onTopUpClick();
+      return;
+    }
+
     if (depositNaira <= 0) {
       setDepositMessage("Enter a deposit amount first.");
       return;
     }
 
+    if (depositMethod === "card" && (!depositCardNumber || !depositCardExpiry || !depositCardCvv)) {
+      setDepositMessage("Enter card number, expiry, and CVV.");
+      return;
+    }
+
     const result = onWalletBalanceChange(walletBalance + depositNaira);
     setDepositMessage(
-      result.ok ? `${depositAmount} USDC received on ${network}. Liquid balance updated.` : result.error
+      result.ok
+        ? depositMethod === "crypto"
+          ? `${depositAmount} USDC received on ${network}. Liquid balance updated.`
+          : `Card top up complete. ${fmt(depositNaira)} added to your wallet.`
+        : result.error
     );
   }
+
+  function formatCardNumber(value: string) {
+    return value
+      .replace(/\D/g, "")
+      .slice(0, 16)
+      .replace(/(.{4})/g, "$1 ")
+      .trim();
+  }
+
+  function formatExpiry(value: string) {
+    const digits = value.replace(/\D/g, "").slice(0, 4);
+    return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+  }
+
+  useEffect(() => {
+    if (topUpRequestKey === 0) return;
+    setDepositOpen(true);
+    setDepositMessage("");
+  }, [topUpRequestKey]);
 
   return (
     <div className="min-h-screen bg-[#f6f8ff] text-slate-950">
@@ -513,7 +839,9 @@ function DesktopMarketplace({
                 </div>
                 <div>
                   <div className="text-sm font-semibold">{userName}</div>
-                  <div className="text-xs text-slate-500">Collector</div>
+                  <div className="text-xs text-slate-500">
+                    {artistStatus === "approved" ? "Artist" : artistStatus === "pending" ? "Artist pending" : "Collector"}
+                  </div>
                 </div>
               </div>
               <div className="mt-5 border-t border-slate-100 pt-4">
@@ -525,8 +853,12 @@ function DesktopMarketplace({
             <button
               type="button"
               onClick={() => {
-                setDepositOpen(true);
-                setDepositMessage("");
+                if (isLoggedIn) {
+                  setDepositOpen(true);
+                  setDepositMessage("");
+                } else {
+                  onTopUpClick();
+                }
               }}
               className="flex items-center justify-center rounded-2xl bg-primary-grad px-4 py-3 text-sm font-semibold text-white shadow-glow"
             >
@@ -550,12 +882,13 @@ function DesktopMarketplace({
               <button className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm">
                 <Bell className="h-5 w-5" />
               </button>
-              <Link
-                to="/list"
+              <button
+                type="button"
+                onClick={onListArtClick}
                 className="inline-flex items-center gap-2 rounded-2xl bg-primary-grad px-6 py-3 text-sm font-semibold text-white shadow-glow"
               >
                 List Your Art <Plus className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </header>
 
@@ -647,18 +980,25 @@ function DesktopMarketplace({
                             <div className="mt-3 font-semibold">{fmt(art.price)}</div>
                             <div className="text-xs text-slate-500">#{art.token}</div>
                             <div className="mt-4 grid grid-cols-2 gap-2">
-                              <Link
-                                to={isOwned ? "/swap" : `/offer?artId=${art.id}`}
-                                className="rounded-xl border border-slate-200 px-3 py-2 text-center text-xs font-semibold hover:border-primary hover:text-primary"
+                              <button
+                                onClick={() => {
+                                  if (isOwned) {
+                                    // For swap, we'd navigate to swap route
+                                    window.location.href = "/swap";
+                                  } else {
+                                    onOfferClick(art.id);
+                                  }
+                                }}
+                                className="rounded-xl border border-slate-200 px-3 py-2 text-center text-xs font-semibold hover:border-primary hover:text-primary transition"
                               >
                                 {isOwned ? "Swap" : "Offer"}
-                              </Link>
-                              <Link
-                                to={`/checkout/${art.id}`}
-                                className="rounded-xl bg-slate-950 px-3 py-2 text-center text-xs font-semibold text-white"
+                              </button>
+                              <button
+                                onClick={() => onBuyClick(art)}
+                                className="rounded-xl bg-slate-950 px-3 py-2 text-center text-xs font-semibold text-white hover:bg-slate-800 transition"
                               >
                                 Buy
-                              </Link>
+                              </button>
                             </div>
                           </div>
                         </article>
@@ -745,35 +1085,113 @@ function DesktopMarketplace({
         <DialogContent className="max-w-[420px] overflow-hidden rounded-3xl border-0 p-0">
           <div className="bg-[hsl(var(--ink))] p-5 text-white">
             <DialogHeader>
-              <DialogTitle className="text-left text-xl">Deposit crypto</DialogTitle>
+              <DialogTitle className="text-left text-xl">Top up wallet</DialogTitle>
               <DialogDescription className="text-left text-white/55">
-                Send USDC to your built-in COllectible wallet.
+                Fund your built-in COllectible wallet with crypto or card.
               </DialogDescription>
             </DialogHeader>
-            <div className="mt-4 rounded-2xl bg-white/10 p-3">
-              <div className="text-[11px] text-white/45">Built-in wallet</div>
-              <div className="mt-1 break-all font-mono text-xs">{walletAddress}</div>
-            </div>
+            {depositMethod === "crypto" && (
+              <div className="mt-4 rounded-2xl bg-white/10 p-3">
+                <div className="text-[11px] text-white/45">Built-in wallet</div>
+                <div className="mt-1 break-all font-mono text-xs">{walletAddress}</div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-4 p-5">
-            <div>
-              <div className="mb-2 text-xs font-semibold text-slate-500">Network</div>
-              <div className="grid grid-cols-3 gap-2">
-                {NETWORKS.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setNetwork(item)}
-                    className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-                      network === item ? "bg-primary text-white" : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
+            <div className="grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setDepositMethod("crypto");
+                  setDepositMessage("");
+                }}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 transition ${
+                  depositMethod === "crypto" ? "bg-white text-primary shadow-sm" : "text-slate-500"
+                }`}
+              >
+                <Wallet className="h-4 w-4" /> Crypto
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDepositMethod("card");
+                  setDepositMessage("");
+                }}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 transition ${
+                  depositMethod === "card" ? "bg-white text-primary shadow-sm" : "text-slate-500"
+                }`}
+              >
+                <CreditCard className="h-4 w-4" /> Card
+              </button>
             </div>
+
+            {depositMethod === "crypto" ? (
+              <div>
+                <div className="mb-2 text-xs font-semibold text-slate-500">Network</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {NETWORKS.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setNetwork(item)}
+                      className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                        network === item ? "bg-primary text-white" : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">Card number</label>
+                  <input
+                    value={depositCardNumber}
+                    onChange={(event) => {
+                      setDepositCardNumber(formatCardNumber(event.target.value));
+                      setDepositMessage("");
+                    }}
+                    inputMode="numeric"
+                    maxLength={19}
+                    placeholder="1234 5678 9012 3456"
+                    className="mt-2 w-full rounded-2xl bg-slate-100 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500">Expiry</label>
+                    <input
+                      value={depositCardExpiry}
+                      onChange={(event) => {
+                        setDepositCardExpiry(formatExpiry(event.target.value));
+                        setDepositMessage("");
+                      }}
+                      inputMode="numeric"
+                      maxLength={5}
+                      placeholder="MM/YY"
+                      className="mt-2 w-full rounded-2xl bg-slate-100 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500">CVV</label>
+                    <input
+                      value={depositCardCvv}
+                      onChange={(event) => {
+                        setDepositCardCvv(event.target.value.replace(/\D/g, "").slice(0, 4));
+                        setDepositMessage("");
+                      }}
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="123"
+                      className="mt-2 w-full rounded-2xl bg-slate-100 px-3 py-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="text-xs font-semibold text-slate-500">Amount to credit</label>
@@ -803,7 +1221,7 @@ function DesktopMarketplace({
               onClick={handleDeposit}
               className="w-full rounded-2xl bg-primary py-3 text-sm font-semibold text-white shadow-glow"
             >
-              Confirm deposit
+              {depositMethod === "crypto" ? "Confirm deposit" : "Top up by card"}
             </button>
           </div>
         </DialogContent>
