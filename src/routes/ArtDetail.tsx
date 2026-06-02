@@ -1,10 +1,9 @@
 import { Link, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
-import { getAllArtworks, getArt, fmt, type Art } from "@/lib/art-data";
-import { OFFERS } from "@/lib/offers-data";
+import { fmt, type Art } from "@/lib/art-data";
 import { AcceptOfferModal } from "@/components/modals/AcceptOfferModal";
 import {
   ArrowLeft,
@@ -27,7 +26,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings, getArtworkOwner } from "@/lib/db";
+import { artAPI, holdingsAPI, offersAPI } from "@/lib/api";
 import { slugify } from "@/routes/ArtistProfile";
 
 function makeUniqueId(id: string) {
@@ -93,21 +92,21 @@ function DesktopSidebar() {
 function DesktopArtworkDetail({
   art,
   isOwned,
-  currentOwnerName,
   uniqueId,
   suggestedCollection,
   collectionOffers,
   onAcceptOffer,
+  allArtworks = [],
 }: {
   art: Art;
   isOwned: boolean;
-  currentOwnerName?: string;
   uniqueId: string;
   suggestedCollection: Art[];
-  collectionOffers: typeof OFFERS;
+  collectionOffers: any[];
   onAcceptOffer?: (offerId: string, amount: number, buyerName: string) => void;
+  allArtworks?: Art[];
 }) {
-  const artistWorks = getAllArtworks().filter((item) => item.artist === art.artist);
+  const artistWorks = allArtworks.filter((item) => item.artist === art.artist);
   const artistValue = artistWorks.reduce((sum, item) => sum + item.price, 0);
 
   return (
@@ -169,7 +168,6 @@ function DesktopArtworkDetail({
                   ["Category", art.category],
                   ["City", art.city],
                   ["Year", art.year.toString()],
-                  ["Current owner", currentOwnerName || "Open market"],
                   ["Token", art.token],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-2xl bg-slate-50 p-4">
@@ -344,20 +342,93 @@ export default function ArtDetail() {
   const { user } = useAuth();
   const [acceptOfferOpen, setAcceptOfferOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<{ id: string; amount: number; buyerName: string } | null>(null);
-  
-  const a = getArt(id!);
-  
-  const userHoldings = user ? getHoldings(user.id) : [];
-  const isOwned = userHoldings.some((h) => h.artId === a.id);
-  const currentOwner = getArtworkOwner(a.id);
-  const allArtworks = getAllArtworks();
+  const [art, setArt] = useState<Art | null>(null);
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
+  const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [collectionOffers, setCollectionOffers] = useState<any[]>([]);
+
+  // Fetch art by ID
+  useEffect(() => {
+    if (!id) return;
+    async function fetchArt() {
+      try {
+        const artwork = await artAPI.getById(id as string);
+        setArt(artwork);
+      } catch (err) {
+        console.error("Failed to fetch artwork:", err);
+      }
+    }
+    fetchArt();
+  }, [id]);
+
+  // Fetch user holdings
+  useEffect(() => {
+    if (!user) {
+      setUserHoldings([]);
+      return;
+    }
+    async function fetchHoldings() {
+      try {
+        const holdings = await holdingsAPI.getByUserId((user as any).id as string);
+        setUserHoldings(holdings || []);
+      } catch (err) {
+        console.error("Failed to fetch holdings:", err);
+        setUserHoldings([]);
+      }
+    }
+    fetchHoldings();
+  }, [user]);
+
+  // Fetch all artworks
+  useEffect(() => {
+    async function fetchArtworks() {
+      try {
+        const artworks = await artAPI.getAll();
+        setAllArtworks(artworks || []);
+      } catch (err) {
+        console.error("Failed to fetch artworks:", err);
+        setAllArtworks([]);
+      }
+    }
+    fetchArtworks();
+  }, []);
+
+  // Fetch offers for this artwork's category
+  useEffect(() => {
+    if (!art || !art.category) return;
+    async function fetchOffers() {
+      try {
+        const allOffers = await offersAPI.getAll();
+        const filtered = allOffers
+          .filter((offer: any) => (offer.category || offer.art_id) === (art as Art).category)
+          .slice(0, 4);
+        setCollectionOffers(filtered);
+      } catch (err) {
+        console.error("Failed to fetch offers:", err);
+        setCollectionOffers([]);
+      }
+    }
+    fetchOffers();
+  }, [art]);
+
+  if (!art) {
+    return (
+      <AppFrame label="Loading...">
+        <div className="flex items-center justify-center py-20">
+          <div className="text-muted-foreground">Loading artwork...</div>
+        </div>
+      </AppFrame>
+    );
+  }
+
+  const a = art;
+  const isOwned = userHoldings.some((h) => (h.art_id || h.artId) === a.id);
   const suggestedCollection = allArtworks
     .filter((art) => art.id !== a.id)
     .filter((art) => art.category === a.category || art.artist === a.artist)
     .slice(0, 3);
-  const collectionOffers = OFFERS.filter((offer) => offer.category === a.category).slice(0, 4);
-  const uniqueId = a.uniqueId || makeUniqueId(a.id);
-  const certificate = a.certificate || {
+  const uniqueId = a.uniqueId || `ART-${a.id.toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`;
+  const certificate = {
     id: `CERT-${uniqueId.replace(/^ART-/, "")}`,
     issuer: "COllectible Vault",
     issuedAt: a.createdAt || `${a.year}`,
@@ -374,12 +445,12 @@ export default function ArtDetail() {
             reference: a.token,
             value: a.price,
           },
-          ...(currentOwner
+          ...(isOwned
             ? [
                 {
-                  title: currentOwner.userName,
+                  title: "Current Collector",
                   date: "Current",
-                  detail: "Current collector of record on COllectible.",
+                  detail: "Currently held on COllectible.",
                   reference: "Active holding",
                 },
               ]
@@ -416,14 +487,14 @@ export default function ArtDetail() {
         <DesktopArtworkDetail
           art={a}
           isOwned={isOwned}
-          currentOwnerName={currentOwner?.userName}
           uniqueId={uniqueId}
           suggestedCollection={
             suggestedCollection.length
               ? suggestedCollection
               : allArtworks.filter((art) => art.id !== a.id).slice(0, 3)
           }
-          collectionOffers={collectionOffers.length ? collectionOffers : OFFERS.slice(0, 4)}
+          collectionOffers={collectionOffers}
+          allArtworks={allArtworks}
           onAcceptOffer={(offerId, amount, buyerName) => {
             setSelectedOffer({ id: offerId, amount, buyerName });
             setAcceptOfferOpen(true);
@@ -471,7 +542,6 @@ export default function ArtDetail() {
               ["Unique ID", uniqueId, "font-mono text-xs"],
               ["Collection", a.collectionName || "—", ""],
               ["Supply", a.supplyName || "—", ""],
-              ...(currentOwner ? [["Current Collector", currentOwner.userName, "text-primary font-semibold"]] : []),
               ["Price", fmt(a.price), "text-primary font-semibold"],
               ["Token ID", a.token, "font-mono text-xs"],
               ...(a.artistSignature ? [["Artist Signature", a.artistSignature, "font-semibold"]] : []),

@@ -1,13 +1,14 @@
 import { AppFrame } from "@/components/AppFrame";
 import { ProfileModalDesktop } from "@/components/modals/ProfileModalDesktop";
 import { SwapModalDesktop } from "@/components/modals/SwapModalDesktop";
-import { getAllArtworks, fmt } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
 import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BadgeCheck, Calendar, LogIn, Palette, Repeat2, Plus, TrendingUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { AuthModal } from "@/components/AuthModal";
-import { getUserHoldings, getHoldings } from "@/lib/db";
+import { holdingsAPI, artAPI } from "@/lib/api";
+import type { Art } from "@/lib/art-data";
 import {
   Dialog,
   DialogContent,
@@ -48,39 +49,89 @@ export default function Profile() {
     callUrl: "",
   });
   const [artistMessage, setArtistMessage] = useState("");
-  
-  // Get user holdings and balance
-  const userHoldings = user ? getUserHoldings(user.id) : { owned: 0, listed: 0, swapped: 0, arts: [] };
-  const allHoldings = user ? getHoldings(user.id) : [];
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
+  const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+
+  // Fetch holdings from API
+  useEffect(() => {
+    if (!user) {
+      setUserHoldings([]);
+      return;
+    }
+
+    async function fetchHoldings() {
+      try {
+        const holdings = await holdingsAPI.getByUserId((user as any).id as string);
+        setUserHoldings(holdings || []);
+      } catch (err) {
+        console.error("Failed to fetch holdings:", err);
+        setUserHoldings([]);
+      }
+    }
+
+    fetchHoldings();
+  }, [user]);
+
+  // Fetch all artworks
+  useEffect(() => {
+    async function fetchArtworks() {
+      try {
+        const artworks = await artAPI.getAll();
+        setAllArtworks(artworks || []);
+      } catch (err) {
+        console.error("Failed to fetch artworks:", err);
+        setAllArtworks([]);
+      }
+    }
+
+    fetchArtworks();
+  }, []);
+
   const balance = user?.walletBalance ?? 0;
   const walletAddress = user ? walletAddressForUser(user.id) : "";
-
-  // Get artworks that belong to this user (deduplicated by artId)
-  const allArtworks = getAllArtworks();
+  
+  // Calculate holding counts from API data
+  const ownedCount = userHoldings.filter((h) => h.status === "owned").length;
+  const listedCount = userHoldings.filter((h) => h.status === "listed").length;
+  const swappedCount = userHoldings.filter((h) => h.status === "swapped").length;
   
   // Calculate portfolio balance (total value of owned artworks)
   const uniqueOwnedIds = new Set<string>();
-  const portfolioBalance = userHoldings.arts
+  const portfolioBalance = userHoldings
     .filter((holding) => holding.status === "owned")
     .reduce((total, holding) => {
-      if (uniqueOwnedIds.has(holding.artId)) return total;
-      uniqueOwnedIds.add(holding.artId);
-      const art = allArtworks.find((a) => a.id === holding.artId);
+      const artId = holding.art_id || holding.artId;
+      if (uniqueOwnedIds.has(artId)) return total;
+      uniqueOwnedIds.add(artId);
+      const art = allArtworks.find((a) => a.id === artId);
       return total + (art?.price ?? 0);
     }, 0);
   const totalPortfolioBalance = balance + portfolioBalance;
 
   // Get artworks for display (deduplicated by artId)
   const uniqueArtIds = new Set<string>();
-  const userArts = userHoldings.arts
+  const userArts = userHoldings
     .slice(0, 3)
     .filter((holding) => {
-      if (uniqueArtIds.has(holding.artId)) return false;
-      uniqueArtIds.add(holding.artId);
+      const artId = holding.art_id || holding.artId;
+      if (uniqueArtIds.has(artId)) return false;
+      uniqueArtIds.add(artId);
       return true;
     })
     .map((holding) => {
-      const art = allArtworks.find((a) => a.id === holding.artId);
+      // The API returns the art data joined with the holding
+      const art: Art | undefined = holding.id && holding.name ? {
+        id: holding.id,
+        name: holding.name,
+        artist: holding.artist,
+        category: holding.category,
+        city: holding.city,
+        year: holding.year,
+        price: holding.price,
+        image: holding.image,
+        token: holding.token,
+        uniqueId: holding.unique_id || holding.uniqueId,
+      } : undefined;
       return { art, holding };
     })
     .filter((item) => item.art);
@@ -252,9 +303,9 @@ export default function Profile() {
             <div className="mt-4 grid grid-cols-3 gap-2">
               {(
                 [
-                  [userHoldings.owned.toString(), "Owned"],
-                  [userHoldings.listed.toString(), "Listed"],
-                  [userHoldings.swapped.toString(), "Swaps"],
+                  [ownedCount.toString(), "Owned"],
+                  [listedCount.toString(), "Listed"],
+                  [swappedCount.toString(), "Swaps"],
                 ] as [string, string][]
               ).map(([v, l]) => (
                 <div key={l} className="rounded-2xl bg-muted/60 p-3 text-center">
