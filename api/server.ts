@@ -2,6 +2,7 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
 import { query, getClient } from './db.ts';
+import { generateDeterministicWallet } from './wallet.ts';
 
 dotenv.config({ path: '.env.local' });
 
@@ -52,17 +53,21 @@ app.get('/api/users/:id', async (req: Request, res: Response) => {
 app.post('/api/users', async (req: Request, res: Response) => {
   const { email, password, name, avatar } = req.body;
   try {
+    // Generate deterministic wallet for user
+    const { address: walletAddress } = generateDeterministicWallet(email);
+    
     const result = await query(
-      `INSERT INTO users (email, password, name, avatar, wallet_balance, artist_status)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO users (email, password, name, avatar, wallet_balance, wallet_address, artist_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [email, password, name, avatar || 'U', 0, 'collector']
+      [email, password, name, avatar || 'U', 0, walletAddress, 'collector']
     );
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
     if (error.code === '23505') {
       return res.status(400).json({ error: 'Email already exists' });
     }
+    console.error('User creation error:', error);
     res.status(500).json({ error: 'Failed to create user' });
   }
 });

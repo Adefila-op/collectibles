@@ -283,6 +283,24 @@ export default function Profile() {
                   <div className="mt-0.5 font-display text-base font-semibold">{fmt(balance)}</div>
                 </div>
 
+                {user.wallet_address && (
+                  <div className="mt-4 w-full rounded-2xl bg-white/5 p-3 backdrop-blur">
+                    <div className="text-xs font-medium text-white/45">On-chain wallet</div>
+                    <div className="mt-1 flex items-center justify-between gap-2 break-all text-[10px] font-mono text-white/70">
+                      <span>{user.wallet_address}</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(user.wallet_address || '');
+                          alert('Wallet address copied!');
+                        }}
+                        className="flex-shrink-0 text-white/40 hover:text-white transition text-xs px-2 py-1"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={() => {
                     setArtistOpen(true);

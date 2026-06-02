@@ -6,6 +6,7 @@ function addUserAliases(user: any): any {
   return {
     ...user,
     walletBalance: user.wallet_balance,
+    walletAddress: user.wallet_address,
     artistStatus: user.artist_status,
     createdAt: user.created_at,
   };
@@ -23,6 +24,7 @@ export interface User {
   name: string;
   avatar: string;
   wallet_balance: number;
+  wallet_address?: string;
   artist_status: 'collector' | 'pending' | 'approved';
   artist_type?: string;
   artist_bio?: string;
@@ -34,6 +36,7 @@ export interface User {
   
   // Aliases for backward compatibility
   walletBalance?: number;
+  walletAddress?: string;
   artistStatus?: 'collector' | 'pending' | 'approved';
   createdAt?: string;
 }

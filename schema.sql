@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255),
   avatar VARCHAR(50),
   wallet_balance BIGINT DEFAULT 0,
+  wallet_address VARCHAR(255),
   artist_status VARCHAR(50) DEFAULT 'collector',
   artist_type VARCHAR(100),
   artist_bio TEXT,
