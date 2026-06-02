@@ -45,7 +45,8 @@ export default function SwapPage() {
   function releaseSwapFunds(offer: Offer) {
     if (!user || !ownedHolding) return;
     updateHoldingStatus(ownedHolding.id, "swapped");
-    updateWalletBalance(user.wallet_balance + offer.cash);
+    // Note: Cash is held in escrow - not directly added to wallet
+    // When swap completes, escrow release happens server-side
   }
 
   const matching = useMemo(() => {

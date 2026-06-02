@@ -8,12 +8,13 @@ import { useState } from "react";
 
 export default function OfferPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateWalletBalance } = useAuth();
   const [searchParams] = useSearchParams();
   const targetArtId = searchParams.get("artId");
   const targetArt = targetArtId ? getArt(targetArtId) : null;
   const [offerAmount, setOfferAmount] = useState(targetArt ? String(targetArt.price) : "");
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!user) {
     return (
@@ -47,8 +48,9 @@ export default function OfferPage() {
     );
   }
 
-  function handlePlaceOffer() {
+  async function handlePlaceOffer() {
     if (!user || !targetArt || !targetArtId) return;
+    if (isSubmitting) return; // Prevent double submission
 
     const amount = parseInt(offerAmount.replace(/[^0-9]/g, ""));
     if (Number.isNaN(amount) || amount <= 0) {
@@ -61,9 +63,24 @@ export default function OfferPage() {
       return;
     }
 
-    createOffer(targetArtId, user.id, amount);
-    setMessage(`Offer placed for ${fmt(amount)} on ${targetArt.name}.`);
-    navigate("/explore");
+    setIsSubmitting(true);
+    try {
+      createOffer(targetArtId, user.id, amount);
+      
+      // Deduct from wallet balance
+      const remainingBalance = (user.walletBalance || 0) - amount;
+      const result = await updateWalletBalance(remainingBalance);
+      
+      if (!result.ok) {
+        setMessage(result.error);
+        return;
+      }
+
+      setMessage(`Offer placed for ${fmt(amount)} on ${targetArt.name}.`);
+      setTimeout(() => navigate("/explore"), 1500);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -116,10 +133,10 @@ export default function OfferPage() {
 
         <button
           onClick={handlePlaceOffer}
-          disabled={!offerAmount}
+          disabled={!offerAmount || isSubmitting}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-grad py-3.5 text-sm font-semibold text-white shadow-glow disabled:opacity-50"
         >
-          <Send className="h-4 w-4" /> Place Offer
+          <Send className="h-4 w-4" /> {isSubmitting ? "Placing..." : "Place Offer"}
         </button>
       </div>
     </AppFrame>

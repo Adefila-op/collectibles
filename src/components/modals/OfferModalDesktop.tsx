@@ -26,6 +26,7 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
   const [offerAmount, setOfferAmount] = useState(targetArt ? String(targetArt.price) : "");
   const [message, setMessage] = useState("");
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!user) {
     return (
@@ -66,6 +67,7 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
 
   async function handlePlaceOffer() {
     if (!user || !targetArt || !artId) return;
+    if (isSubmitting) return; // Prevent double submission
 
     const amount = parseInt(offerAmount.replace(/[^0-9]/g, ""));
     if (Number.isNaN(amount) || amount <= 0) {
@@ -78,24 +80,29 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
       return;
     }
 
-    // Create the offer
-    createOffer(artId, user.id, amount);
-    
-    // Deduct from wallet balance
-    const remainingBalance = (user.walletBalance || 0) - amount;
-    const result = await updateWalletBalance(remainingBalance);
-    
-    if (!result.ok) {
-      setMessage(result.error);
-      return;
-    }
+    setIsSubmitting(true);
+    try {
+      // Create the offer
+      createOffer(artId, user.id, amount);
+      
+      // Deduct from wallet balance
+      const remainingBalance = (user.walletBalance || 0) - amount;
+      const result = await updateWalletBalance(remainingBalance);
+      
+      if (!result.ok) {
+        setMessage(result.error);
+        return;
+      }
 
-    setMessage(`Offer placed for ${fmt(amount)} on ${targetArt.name}.`);
-    setTimeout(() => {
-      onOpenChange(false);
-      setMessage("");
-      setOfferAmount(String(targetArt.price));
-    }, 1500);
+      setMessage(`Offer placed for ${fmt(amount)} on ${targetArt.name}.`);
+      setTimeout(() => {
+        onOpenChange(false);
+        setMessage("");
+        setOfferAmount(String(targetArt.price));
+      }, 1500);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -176,9 +183,10 @@ export function OfferModalDesktop({ open, onOpenChange, artId, onTopUpClick }: O
             </button>
             <button
               onClick={handlePlaceOffer}
-              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
+              disabled={isSubmitting}
+              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send className="h-4 w-4" /> Place Offer
+              <Send className="h-4 w-4" /> {isSubmitting ? "Placing..." : "Place Offer"}
             </button>
           </div>
         </div>

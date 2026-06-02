@@ -105,7 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (nextBalance: number): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!user) return { ok: false, error: "Sign in to use your wallet." };
       try {
-        const updatedUser = await userAPI.updateWallet(user.id, nextBalance - user.wallet_balance);
+        // Fetch latest user to get current balance
+        const latestUsers = await userAPI.getAll();
+        const latestUser = latestUsers.find((u: User) => u.id === user.id);
+        
+        if (!latestUser) {
+          return { ok: false, error: "User not found" };
+        }
+        
+        // Calculate delta from latest balance
+        const delta = nextBalance - (latestUser.wallet_balance || 0);
+        const updatedUser = await userAPI.updateWallet(user.id, delta);
         localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
         setUser(updatedUser);
         return { ok: true };
