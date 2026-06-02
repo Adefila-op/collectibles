@@ -1,7 +1,9 @@
 import { Link, useParams } from "react-router-dom";
 import { BrandLogo } from "./BrandLogo";
-import { getAllArtworks, fmt } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
+import { artAPI } from "@/lib/api";
 import { getUsers } from "@/lib/db";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Calendar,
@@ -13,6 +15,7 @@ import {
   UserRound,
   Wallet,
 } from "lucide-react";
+import type { Art } from "@/lib/api";
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -96,6 +99,7 @@ function DesktopSidebar() {
 }
 
 export function ArtistProfileDesktop({ slug }: { slug: string }) {
+  const [portfolio, setPortfolio] = useState<Art[]>([]);
   const users = getUsers();
   const approvedUser = users.find(
     (user) => slugify(user.name) === slug && user.artistStatus === "approved"
@@ -113,7 +117,18 @@ export function ArtistProfileDesktop({ slug }: { slug: string }) {
       }
     : STATIC_ARTISTS[slug || ""] ?? STATIC_ARTISTS[slugify("Emeka Osei")];
 
-  const portfolio = getAllArtworks().filter((art) => art.artist === profile.name);
+  useEffect(() => {
+    const fetchPortfolio = async () => {
+      try {
+        const allArtworks = await artAPI.getAll();
+        setPortfolio(allArtworks.filter((art: Art) => art.artist === profile.name));
+      } catch (err) {
+        console.error("Failed to fetch portfolio:", err);
+      }
+    };
+    fetchPortfolio();
+  }, [profile.name]);
+
   const totalMarket = portfolio.reduce((sum, art) => sum + art.price, 0);
 
   return (

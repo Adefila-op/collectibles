@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { getAllArtworks, fmt } from "@/lib/art-data";
+import { useState, useEffect } from "react";
+import { fmt } from "@/lib/art-data";
+import { artAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
 import { ShoppingCart } from "lucide-react";
@@ -11,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TransactionModal } from "./TransactionModal";
+import type { Art } from "@/lib/api";
 
 interface BuyArtModalProps {
   open: boolean;
@@ -20,9 +22,23 @@ interface BuyArtModalProps {
 export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [selectedArt, setSelectedArt] = useState<{ id: string; name: string; price: number } | null>(null);
+  const [allArtworks, setAllArtworks] = useState<Art[]>([]);
   const { user } = useAuth();
 
-  const allArtworks = getAllArtworks();
+  useEffect(() => {
+    const fetchArtworks = async () => {
+      try {
+        const artworks = await artAPI.getAll();
+        setAllArtworks(artworks);
+      } catch (err) {
+        console.error("Failed to fetch artworks:", err);
+      }
+    };
+    if (open) {
+      fetchArtworks();
+    }
+  }, [open]);
+
   const allHoldings = getHoldings();
   const userHeldArtIds = new Set(
     user ? allHoldings.filter((h) => h.userId === user.id && h.status !== "swapped").map((h) => h.artId) : []

@@ -492,7 +492,7 @@ export default function Explore() {
           <div className="space-y-3 pt-2">
             <div className="text-xs font-semibold text-muted-foreground">Trending now</div>
             <div className="grid grid-cols-2 gap-3">
-              {ARTWORKS.slice(0, 4).map((a) => (
+              {allArtworks.slice(0, 4).map((a) => (
                 <Link
                   key={a.id}
                   to={`/art/${a.id}`}
@@ -1294,16 +1294,7 @@ function PortfolioDashboard({
   const collectionItems: { holding: UserHolding; art: Art }[] =
     items.length > 0
       ? items
-      : (ARTWORKS.slice(0, 3).map((art, index) => ({
-          art,
-          holding: {
-            id: `demo-${art.id}`,
-            userId: "demo",
-            artId: art.id,
-            status: index === 1 ? "listed" as const : "owned" as const,
-            acquiredAt: "2026-05-12T12:00:00.000Z",
-          },
-        })) as any);
+      : ([] as { holding: UserHolding; art: Art }[]);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const heldArtIds = new Set(collectionItems.map((item) => item.art.id));
   const artValue = collectionItems.reduce((sum, item) => sum + item.art.price, 0);
@@ -1315,7 +1306,7 @@ function PortfolioDashboard({
   }))
     .filter((item): item is { offer: (typeof OFFERS)[number]; match: { holding: UserHolding; art: Art } } => Boolean(item.match))
     .slice(0, 4);
-  const suggestedArt = ARTWORKS.filter((art) => !heldArtIds.has(art.id)).slice(0, 3);
+  const suggestedArt = collectionItems.map(item => item.art).filter((art) => !heldArtIds.has(art.id)).slice(0, 3);
 
   return (
     <>

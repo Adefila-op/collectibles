@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
-import { getAllArtworks, fmt } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
+import { artAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
 import { ShoppingCart } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { Art } from "@/lib/api";
 
 interface BuyArtModalProps {
   open: boolean;
@@ -18,8 +21,22 @@ interface BuyArtModalProps {
 
 export function BuyArtModal({ open, onOpenChange }: BuyArtModalProps) {
   const { user } = useAuth();
+  const [allArtworks, setAllArtworks] = useState<Art[]>([]);
 
-  const allArtworks = getAllArtworks();
+  useEffect(() => {
+    const fetchArtworks = async () => {
+      try {
+        const artworks = await artAPI.getAll();
+        setAllArtworks(artworks);
+      } catch (err) {
+        console.error("Failed to fetch artworks:", err);
+      }
+    };
+    if (open) {
+      fetchArtworks();
+    }
+  }, [open]);
+
   const allHoldings = getHoldings();
   const userHeldArtIds = new Set(
     user ? allHoldings.filter((h) => h.userId === user.id && h.status !== "swapped").map((h) => h.artId) : []

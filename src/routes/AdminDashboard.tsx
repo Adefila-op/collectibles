@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUsers, updateArtistStatus, getAdminEventHistory, getTransactionHistory, getArtistRoyalties, type User, type AdminEvent, type Transaction, type ArtistRoyalty } from "@/lib/db";
-import { getAllArtworks, type Art } from "@/lib/art-data";
+import { artAPI, type Art } from "@/lib/api";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, TrendingUp, Users } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -23,7 +23,15 @@ export default function AdminDashboard() {
       setUsers(getUsers());
       setAdminEvents(getAdminEventHistory(50));
       setTransactions(getTransactionHistory());
-      setArtworks(getAllArtworks());
+      const fetchArtworks = async () => {
+        try {
+          const arts = await artAPI.getAll();
+          setArtworks(arts);
+        } catch (err) {
+          console.error("Failed to fetch artworks:", err);
+        }
+      };
+      fetchArtworks();
     }
   }, [unlocked]);
 
