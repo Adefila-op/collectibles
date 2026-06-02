@@ -182,12 +182,20 @@ function DesktopArtworkDetail({
                     <div className="mt-1 text-lg font-bold">{isOwned ? "Swap this owned artwork" : "Buy or make an offer"}</div>
                   </div>
                   {isOwned ? (
-                    <Link
-                      to="/swap"
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
-                    >
-                      <Repeat2 className="h-4 w-4" /> Swap
-                    </Link>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Link
+                        to={`/list?artId=${art.id}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                      >
+                        <Wallet className="h-4 w-4" /> List
+                      </Link>
+                      <Link
+                        to={`/swap?artId=${art.id}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                      >
+                        <Repeat2 className="h-4 w-4" /> Swap
+                      </Link>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-3">
                       <Link
@@ -298,8 +306,11 @@ function DesktopArtworkDetail({
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold">{fmt(offer.cash)}</div>
-                    <Link to={`/offer?artId=${art.id}`} className="text-xs font-semibold text-primary">
-                      Accept
+                    <Link
+                      to={isOwned ? `/swap?artId=${art.id}&offerId=${offer.id}` : `/offer?artId=${art.id}`}
+                      className="text-xs font-semibold text-primary"
+                    >
+                      {isOwned ? "Swap" : "Accept"}
                     </Link>
                   </div>
                 </div>
@@ -455,26 +466,36 @@ export default function ArtDetail() {
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Link
-            to={`/checkout/${a.id}`}
-            className="rounded-2xl bg-primary py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition hover:bg-primary/90"
-          >
-            <ShoppingCart className="h-4 w-4" /> Buy
-          </Link>
           {isOwned ? (
-            <Link
-              to="/swap"
-              className="rounded-2xl bg-emerald-500 hover:bg-emerald-600 py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition"
-            >
-              <Repeat2 className="h-4 w-4" /> Swap
-            </Link>
+            <>
+              <Link
+                to={`/list?artId=${a.id}`}
+                className="rounded-2xl bg-slate-950 py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition hover:bg-slate-800"
+              >
+                <Wallet className="h-4 w-4" /> List
+              </Link>
+              <Link
+                to={`/swap?artId=${a.id}`}
+                className="rounded-2xl bg-emerald-500 hover:bg-emerald-600 py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition"
+              >
+                <Repeat2 className="h-4 w-4" /> Swap
+              </Link>
+            </>
           ) : (
-            <Link
-              to={`/offer?artId=${a.id}`}
-              className="rounded-2xl bg-primary hover:bg-primary/90 py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition"
-            >
-              <Send className="h-4 w-4" /> Offer
-            </Link>
+            <>
+              <Link
+                to={`/checkout/${a.id}`}
+                className="rounded-2xl bg-primary py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition hover:bg-primary/90"
+              >
+                <ShoppingCart className="h-4 w-4" /> Buy
+              </Link>
+              <Link
+                to={`/offer?artId=${a.id}`}
+                className="rounded-2xl bg-primary hover:bg-primary/90 py-3 text-center text-sm font-semibold text-white shadow-glow flex items-center justify-center gap-1 transition"
+              >
+                <Send className="h-4 w-4" /> Offer
+              </Link>
+            </>
           )}
         </div>
 

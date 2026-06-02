@@ -19,10 +19,15 @@ type Stage = 0 | 1 | 2 | 3 | 4;
 export default function SwapPage() {
   const { user, updateWalletBalance } = useAuth();
   const allArtworks = getAllArtworks();
-  const ownedHolding = user ? getHoldings(user.id).find((holding) => holding.status === "owned") : null;
-  const [myArt] = useState<Art>(
-    ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0]
-  );
+  const query = new URLSearchParams(window.location.search);
+  const requestedArtId = query.get("artId");
+  const requestedOfferId = query.get("offerId");
+  const userHoldings = user ? getHoldings(user.id) : [];
+  const ownedHolding =
+    userHoldings.find((holding) => holding.status !== "swapped" && holding.artId === requestedArtId) ||
+    userHoldings.find((holding) => holding.status !== "swapped") ||
+    null;
+  const myArt: Art = ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0];
   const [selected, setSelected] = useState<Offer | null>(null);
   const [stage, setStage] = useState<Stage>(0);
   const [message, setMessage] = useState("");
@@ -43,11 +48,15 @@ export default function SwapPage() {
     updateWalletBalance(user.walletBalance + offer.cash);
   }
 
-  const matching = useMemo(
-    () =>
-      [...OFFERS.filter((o) => o.category === myArt.category)].sort((a, b) => b.cash - a.cash),
-    [myArt.category]
-  );
+  const matching = useMemo(() => {
+    const offers = [...OFFERS.filter((o) => o.category === myArt.category)].sort((a, b) => b.cash - a.cash);
+    if (!requestedOfferId) return offers;
+    return offers.sort((a, b) => {
+      if (a.id === requestedOfferId) return -1;
+      if (b.id === requestedOfferId) return 1;
+      return 0;
+    });
+  }, [myArt.category, requestedOfferId]);
   const top = matching[0];
 
   if (selected) {

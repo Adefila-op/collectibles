@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
-import logo from "@/assets/collectible-logo.png";
 import {
   Dialog,
   DialogContent,
@@ -9,11 +8,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import heroCharacter from "@/assets/hero-character.png";
 import { getAllArtworks, fmt, ARTWORKS, type Art } from "@/lib/art-data";
 import { OFFERS } from "@/lib/offers-data";
 import {
   ArrowRight,
+  Banknote,
   Bell,
   Bookmark,
   CalendarDays,
@@ -899,7 +898,13 @@ function DesktopMarketplace({
           >
             <section className="space-y-6">
               {activeSection === "portfolio" ? (
-                <PortfolioDashboard items={portfolioItems} walletBalance={walletBalance} userName={userName} initials={initials} />
+                <PortfolioDashboard
+                  items={portfolioItems}
+                  walletBalance={walletBalance}
+                  onWalletBalanceChange={onWalletBalanceChange}
+                  userName={userName}
+                  initials={initials}
+                />
               ) : activeSection === "artists" ? (
                 <ArtistDashboard artists={artists} />
               ) : (
@@ -1233,11 +1238,13 @@ function DesktopMarketplace({
 function PortfolioDashboard({
   items,
   walletBalance,
+  onWalletBalanceChange,
   userName,
   initials,
 }: {
   items: { holding: UserHolding; art: Art }[];
   walletBalance: number;
+  onWalletBalanceChange: (balance: number) => void;
   userName: string;
   initials: string;
 }) {
@@ -1254,20 +1261,21 @@ function PortfolioDashboard({
             acquiredAt: "2026-05-12T12:00:00.000Z",
           },
         }));
-  const [selectedArtId, setSelectedArtId] = useState(collectionItems[0]?.art.id || "");
-  const [transferRoute, setTransferRoute] = useState<"platform" | "onchain">("platform");
-  const [recipient, setRecipient] = useState("collector@artchain");
-  const [transferNote, setTransferNote] = useState("");
-  const [transferMessage, setTransferMessage] = useState("");
-  const activeHolding = collectionItems.find((item) => item.art.id === selectedArtId) || collectionItems[0];
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const heldArtIds = new Set(collectionItems.map((item) => item.art.id));
   const artValue = collectionItems.reduce((sum, item) => sum + item.art.price, 0);
   const listedCount = collectionItems.filter((item) => item.holding.status === "listed").length;
   const generalBalance = walletBalance + artValue;
-  const activeOffers = OFFERS.filter((offer) => collectionItems.some((item) => item.art.category === offer.category)).slice(0, 4);
+  const activeOffers = OFFERS.map((offer) => ({
+    offer,
+    match: collectionItems.find((item) => item.art.category === offer.category),
+  }))
+    .filter((item): item is { offer: (typeof OFFERS)[number]; match: { holding: UserHolding; art: Art } } => Boolean(item.match))
+    .slice(0, 4);
   const suggestedArt = ARTWORKS.filter((art) => !heldArtIds.has(art.id)).slice(0, 3);
 
   return (
+    <>
     <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-6">
         <section className="rounded-[28px] bg-white p-6 shadow-sm">
@@ -1299,34 +1307,35 @@ function PortfolioDashboard({
                 <div className="text-xs text-slate-500">{label}</div>
                 <div className="mt-1 text-2xl font-bold">{value}</div>
                 <div className="mt-1 text-xs text-slate-500">{meta}</div>
+                {label === "Portfolio balance" && (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawOpen(true)}
+                    className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    <Banknote className="h-3.5 w-3.5" /> Withdraw
+                  </button>
+                )}
               </div>
             ))}
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section>
           <div className="rounded-[28px] bg-white p-5 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="font-display text-xl font-semibold">Collection holdings</h2>
-                <div className="text-sm text-slate-500">Choose a work to route inside the transfer frame</div>
+                <div className="text-sm text-slate-500">Open a work to list it or swap into matching offers</div>
               </div>
               <PackageCheck className="h-5 w-5 text-primary" />
             </div>
-            <div className="space-y-3">
+            <div className="grid gap-3 lg:grid-cols-2">
               {collectionItems.map(({ holding, art }) => (
-                <button
+                <Link
                   key={holding.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedArtId(art.id);
-                    setTransferMessage("");
-                  }}
-                  className={`flex w-full items-center gap-4 rounded-2xl p-3 text-left transition ${
-                    activeHolding?.art.id === art.id
-                      ? "bg-primary/10 ring-1 ring-primary/20"
-                      : "bg-slate-50 hover:bg-slate-100"
-                  }`}
+                  to={`/art/${art.id}`}
+                  className="flex w-full items-center gap-4 rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"
                 >
                   <img src={art.image} alt={art.name} className="h-20 w-20 rounded-2xl object-cover" />
                   <div className="min-w-0 flex-1">
@@ -1340,111 +1349,10 @@ function PortfolioDashboard({
                   <div className="text-right">
                     <div className="text-sm font-bold">{fmt(art.price)}</div>
                     <div className="text-xs text-slate-500">#{art.token}</div>
+                    <div className="mt-2 text-xs font-semibold text-primary">Open details</div>
                   </div>
-                </button>
+                </Link>
               ))}
-            </div>
-          </div>
-
-          <div className="rounded-[28px] bg-white p-5 shadow-sm">
-            <div className="relative mx-auto mb-3 grid h-32 w-44 place-items-end overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#0b6fff,#19c6ff)]">
-              <div className="absolute inset-x-5 top-4 flex items-center justify-between text-xs font-semibold text-white/85">
-                <img src={logo} alt="" className="h-6 w-6 rounded-md object-cover" />
-                <ShieldCheck className="h-4 w-4" />
-              </div>
-              <img
-                src={heroCharacter}
-                alt="COllectible blue platform mascot"
-                className="relative z-10 h-28 object-contain drop-shadow-[0_18px_22px_rgba(0,24,95,0.35)]"
-              />
-            </div>
-            <h2 className="text-center font-display text-lg font-semibold">Route collection</h2>
-            <div className="mt-4 grid grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm font-semibold">
-              {[
-                ["platform", "COllectible user"],
-                ["onchain", "Onchain route"],
-              ].map(([route, label]) => (
-                <button
-                  key={route}
-                  type="button"
-                  onClick={() => {
-                    setTransferRoute(route as "platform" | "onchain");
-                    setTransferMessage("");
-                  }}
-                  className={`rounded-xl px-3 py-2 transition ${
-                    transferRoute === route ? "bg-slate-950 text-white shadow-sm" : "text-slate-600"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-500">Collection</span>
-                <select
-                  value={selectedArtId}
-                  onChange={(event) => {
-                    setSelectedArtId(event.target.value);
-                    setTransferMessage("");
-                  }}
-                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold outline-none focus:border-primary"
-                >
-                  {collectionItems.map(({ art }) => (
-                    <option key={art.id} value={art.id}>{art.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-500">
-                  {transferRoute === "platform" ? "Send to COllectible user" : "Wallet or ENS destination"}
-                </span>
-                <input
-                  value={recipient}
-                  onChange={(event) => {
-                    setRecipient(event.target.value);
-                    setTransferMessage("");
-                  }}
-                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-primary"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-500">Transfer note</span>
-                <input
-                  value={transferNote}
-                  onChange={(event) => setTransferNote(event.target.value)}
-                  placeholder="Optional private memo"
-                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-primary"
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <div className="text-slate-500">Route fee</div>
-                  <div className="mt-1 font-bold">{transferRoute === "platform" ? "0 AC" : "12 AC"}</div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <div className="text-slate-500">Route status</div>
-                  <div className="mt-1 font-bold">{transferRoute === "platform" ? "Instant" : "Onchain"}</div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  setTransferMessage(
-                    `${activeHolding?.art.name || "Collection"} routed to ${recipient || "recipient"} via ${
-                      transferRoute === "platform" ? "COllectible" : "onchain"
-                    }.`
-                  )
-                }
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-glow"
-              >
-                <Send className="h-4 w-4" /> Send collection
-              </button>
-              {transferMessage && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-700">
-                  {transferMessage}
-                </div>
-              )}
             </div>
           </div>
         </section>
@@ -1460,7 +1368,7 @@ function PortfolioDashboard({
             <TrendingUp className="h-5 w-5 text-emerald-500" />
           </div>
           <div className="space-y-3">
-            {activeOffers.map((offer) => (
+            {activeOffers.map(({ offer, match }) => (
               <div key={offer.id} className="rounded-2xl bg-slate-50 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -1470,11 +1378,14 @@ function PortfolioDashboard({
                     <div>
                       <div className="text-sm font-semibold">{offer.buyer}</div>
                       <div className="text-xs text-slate-500">{offer.buyerCity} - {offer.category}</div>
+                      <div className="mt-1 text-[10px] font-semibold text-slate-500">Matches {match.art.name}</div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold">{fmt(offer.cash)}</div>
-                    <Link to="/offer" className="text-xs font-semibold text-primary">Review</Link>
+                    <Link to={`/swap?artId=${match.art.id}&offerId=${offer.id}`} className="text-xs font-semibold text-primary">
+                      Swap
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -1505,6 +1416,178 @@ function PortfolioDashboard({
         </section>
       </aside>
     </div>
+    <PortfolioWithdrawModal
+      open={withdrawOpen}
+      onOpenChange={setWithdrawOpen}
+      walletBalance={walletBalance}
+      collectionItems={collectionItems}
+      onWalletBalanceChange={onWalletBalanceChange}
+    />
+    </>
+  );
+}
+
+function PortfolioWithdrawModal({
+  open,
+  onOpenChange,
+  walletBalance,
+  collectionItems,
+  onWalletBalanceChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  walletBalance: number;
+  collectionItems: { holding: UserHolding; art: Art }[];
+  onWalletBalanceChange: (balance: number) => void;
+}) {
+  const [withdrawType, setWithdrawType] = useState<"crypto" | "bank" | "asset">("crypto");
+  const [amount, setAmount] = useState("150");
+  const [destination, setDestination] = useState("");
+  const [assetId, setAssetId] = useState(collectionItems[0]?.art.id || "");
+  const [message, setMessage] = useState("");
+  const withdrawNaira = Math.max(0, Math.round((Number(amount) || 0) * NAIRA_PER_USDC));
+  const selectedAsset = collectionItems.find((item) => item.art.id === assetId)?.art || collectionItems[0]?.art;
+
+  function handleWithdraw() {
+    if (withdrawType === "asset") {
+      if (!selectedAsset) {
+        setMessage("Select an onchain asset first.");
+        return;
+      }
+      setMessage(`${selectedAsset.name} withdrawal requested to ${destination || "connected wallet"}.`);
+      return;
+    }
+
+    if (withdrawNaira <= 0) {
+      setMessage("Enter a withdrawal amount first.");
+      return;
+    }
+    if (withdrawNaira > walletBalance) {
+      setMessage("Insufficient liquid balance for this withdrawal.");
+      return;
+    }
+
+    onWalletBalanceChange(walletBalance - withdrawNaira);
+    setMessage(
+      `${amount} USDC withdrawal queued to ${withdrawType === "crypto" ? "crypto wallet" : "bank account"}.`
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg overflow-hidden rounded-[28px] border-0 p-0">
+        <DialogHeader className="bg-slate-950 px-6 py-5 text-left text-white">
+          <DialogTitle className="font-display text-2xl">Withdraw portfolio value</DialogTitle>
+          <DialogDescription className="text-white/60">
+            Move liquid funds to crypto or bank, or withdraw a held onchain asset.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-5 p-6">
+          <div className="grid grid-cols-3 rounded-2xl bg-slate-100 p-1 text-xs font-semibold">
+            {[
+              ["crypto", "Crypto"],
+              ["bank", "Bank"],
+              ["asset", "Asset"],
+            ].map(([type, label]) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => {
+                  setWithdrawType(type as "crypto" | "bank" | "asset");
+                  setMessage("");
+                }}
+                className={`rounded-xl px-3 py-2.5 transition ${
+                  withdrawType === type ? "bg-white text-primary shadow-sm" : "text-slate-500"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {withdrawType === "asset" ? (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500">Onchain asset</span>
+                <select
+                  value={assetId}
+                  onChange={(event) => {
+                    setAssetId(event.target.value);
+                    setMessage("");
+                  }}
+                  className="mt-2 w-full rounded-2xl bg-slate-100 px-3 py-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  {collectionItems.map(({ art }) => (
+                    <option key={art.id} value={art.id}>{art.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500">Wallet destination</span>
+                <input
+                  value={destination}
+                  onChange={(event) => {
+                    setDestination(event.target.value);
+                    setMessage("");
+                  }}
+                  placeholder="0x wallet or ENS"
+                  className="mt-2 w-full rounded-2xl bg-slate-100 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500">Amount</span>
+                <div className="mt-2 flex items-center rounded-2xl bg-slate-100 px-3 py-2.5">
+                  <input
+                    value={amount}
+                    onChange={(event) => {
+                      setAmount(event.target.value);
+                      setMessage("");
+                    }}
+                    inputMode="decimal"
+                    className="min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+                  />
+                  <span className="text-xs font-semibold text-slate-500">USDC</span>
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Withdraws {fmt(withdrawNaira)} from {fmt(walletBalance)}
+                </div>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500">
+                  {withdrawType === "crypto" ? "Wallet destination" : "Bank account"}
+                </span>
+                <input
+                  value={destination}
+                  onChange={(event) => {
+                    setDestination(event.target.value);
+                    setMessage("");
+                  }}
+                  placeholder={withdrawType === "crypto" ? "0x wallet or ENS" : "Account number or saved bank"}
+                  className="mt-2 w-full rounded-2xl bg-slate-100 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+            </div>
+          )}
+
+          {message && (
+            <div className="rounded-2xl bg-primary/10 p-3 text-xs font-medium text-primary">
+              {message}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleWithdraw}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-glow"
+          >
+            <Banknote className="h-4 w-4" /> Request withdrawal
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
