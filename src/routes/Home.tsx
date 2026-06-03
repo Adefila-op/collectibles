@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
+import { ShopButton } from "@/components/ShopButton";
 import { getAllArtworks, fmt } from "@/lib/art-data";
 import {
   Repeat2,
@@ -175,12 +176,7 @@ function DesktopLanding() {
             <Link to="/explore?section=artists" className="text-[13px] text-white/65 transition hover:text-white">
               Artists
             </Link>
-            <Link
-              to="/explore"
-              className="rounded-full bg-white px-[18px] py-[7px] text-[13px] font-medium text-[#1a43d4]"
-            >
-              Shop art
-            </Link>
+            <ShopButton variant="nav" />
           </div>
         </nav>
 
@@ -202,12 +198,7 @@ function DesktopLanding() {
               COllectible is the provenance infrastructure for overlooked art markets, starting with Africa.
             </p>
             <div className="flex items-center gap-3">
-              <Link
-                to="/explore"
-                className="rounded-full bg-white px-[22px] py-2.5 text-sm font-medium text-[#1a43d4]"
-              >
-                Shop art
-              </Link>
+              <ShopButton variant="primary" />
               <Link
                 to="/explore"
                 className="inline-flex items-center gap-1.5 rounded-full border border-white/25 px-[18px] py-2.5 text-[13px] text-white/65 transition hover:border-white/45 hover:text-white"

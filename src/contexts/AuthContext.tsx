@@ -102,8 +102,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
+    // Clear all session data
     localStorage.removeItem("artchain_session");
+    localStorage.removeItem("artchain_users");
+    localStorage.removeItem("artchain_admin");
+    localStorage.removeItem("isAdmin");
+    // Clear user state
     setUser(null);
+    // Dispatch event for other components to react to logout
+    window.dispatchEvent(new Event("logout"));
   }, []);
 
   const updateWalletBalance = useCallback(

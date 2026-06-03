@@ -5,8 +5,9 @@ import { fmt } from "@/lib/art-data";
 import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BadgeCheck, Calendar, LogIn, Palette, Repeat2, Plus, TrendingUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AuthModal } from "@/components/AuthModal";
+import { SignOutButton } from "@/components/SignOutButton";
 import { holdingsAPI, artAPI } from "@/lib/api";
 import type { Art } from "@/lib/art-data";
 import {
@@ -30,7 +31,8 @@ function walletAddressForUser(userId: string) {
 }
 
 export default function Profile() {
-  const { user, signOut, updateWalletBalance, submitArtistApplication } = useAuth();
+  const { user, updateWalletBalance, submitArtistApplication } = useAuth();
+  const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw" | null>(null);
@@ -225,23 +227,17 @@ export default function Profile() {
         </div>
 
         <div className="flex items-end gap-3 px-1">
-          <button
-            onClick={() => {
-              if (user) {
-                signOut();
-              } else {
-                setAuthOpen(true);
-              }
-            }}
-            className="grid h-16 w-16 place-items-center rounded-2xl bg-card text-lg font-bold text-primary ring-4 ring-card shadow-glow hover:opacity-80 transition-opacity cursor-pointer"
-          >
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-card text-lg font-bold text-primary ring-4 ring-card shadow-glow">
             {user ? user.avatar : "?"}
-          </button>
+          </div>
           <div className="pb-1">
             {user ? (
               <>
-                <div className="flex items-center gap-1.5 font-display text-lg font-semibold">
-                  {user.name} <BadgeCheck className="h-4 w-4 text-primary" />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 font-display text-lg font-semibold">
+                    {user.name} <BadgeCheck className="h-4 w-4 text-primary" />
+                  </div>
+                  <SignOutButton showText={false} />
                 </div>
                 <div className="text-[11px] text-muted-foreground">
                   Lagos · Collector since{" "}
