@@ -3,7 +3,7 @@ import { fmt } from "@/lib/art-data";
 import { artAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHoldings } from "@/lib/db";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,15 +23,19 @@ export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [selectedArt, setSelectedArt] = useState<{ id: string; name: string; price: number } | null>(null);
   const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
     const fetchArtworks = async () => {
       try {
+        setIsLoading(true);
         const artworks = await artAPI.getAll();
         setAllArtworks(artworks);
       } catch (err) {
         console.error("Failed to fetch artworks:", err);
+      } finally {
+        setIsLoading(false);
       }
     };
     if (open) {
@@ -62,7 +66,20 @@ export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
         </DialogHeader>
 
         <div className="space-y-3 pt-2">
-          {availableForPurchase.length === 0 ? (
+          {isLoading ? (
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border border-border bg-muted/40 animate-pulse">
+                  <div className="aspect-square bg-muted" />
+                  <div className="p-2.5 space-y-2">
+                    <div className="h-3 bg-muted rounded w-3/4" />
+                    <div className="h-2 bg-muted rounded w-1/2" />
+                    <div className="h-3 bg-muted rounded w-1/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : availableForPurchase.length === 0 ? (
             <div className="rounded-2xl border border-border bg-muted/60 p-6 text-center space-y-3">
               <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto opacity-40" />
               <div>

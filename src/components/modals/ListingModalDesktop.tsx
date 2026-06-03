@@ -1,4 +1,4 @@
-import { Camera, Zap } from "lucide-react";
+import { Camera, Zap, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { topOfferForCategory } from "@/lib/offers-data";
@@ -35,6 +35,7 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [imageData, setImageData] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState<ListingForm>({
     title: "",
     category: "Painting",
@@ -102,26 +103,33 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
     }
 
     try {
+      setIsSubmitting(true);
+      setMessage("");
+      
       if (!form.title.trim()) {
         setMessage("Please enter a title");
+        setIsSubmitting(false);
         return;
       }
 
       const priceNum = parseInt(form.price.replace(/[^0-9]/g, ""));
       if (isNaN(priceNum) || priceNum <= 0) {
         setMessage("Please enter a valid price");
+        setIsSubmitting(false);
         return;
       }
 
       const yearNum = parseInt(form.year);
       if (isNaN(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear()) {
         setMessage("Please enter a valid year");
+        setIsSubmitting(false);
         return;
       }
 
       const city = form.location.split(",")[0].trim();
       if (!city) {
         setMessage("Please enter a valid location");
+        setIsSubmitting(false);
         return;
       }
 
@@ -129,6 +137,7 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
         const supplyNum = parseInt(form.supply.replace(/[^0-9]/g, ""));
         if (isNaN(supplyNum) || supplyNum < 2) {
           setMessage("Please enter a supply of 2 or more");
+          setIsSubmitting(false);
           return;
         }
       }
@@ -169,6 +178,8 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
     } catch (error) {
       console.error("Error publishing artwork:", error);
       setMessage("Error publishing artwork. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -369,16 +380,24 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
               <>
                 <button
                   onClick={() => onOpenChange(false)}
-                  className="flex-1 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold transition hover:bg-muted"
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold transition hover:bg-muted disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handlePublish}
-                  disabled={!canGoNext}
-                  className="flex-1 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canGoNext || isSubmitting}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Publish
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    "Publish"
+                  )}
                 </button>
               </>
             )}

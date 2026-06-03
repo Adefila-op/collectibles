@@ -3,6 +3,7 @@ import cors from 'cors';
 import * as dotenv from 'dotenv';
 import * as bcrypt from 'bcrypt';
 import { query, getClient } from './db.ts';
+import { mockDb } from './mock-db.ts';
 import { 
   generateDeterministicWallet, 
   getWalletBalance,
@@ -17,28 +18,44 @@ dotenv.config({ path: '.env.local' });
 const app: Express = express();
 const PORT = process.env.API_PORT || 3000;
 
+// Global flag to track if database is available
+let DATABASE_AVAILABLE = false;
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 async function ensureRuntimeSchema() {
-  await query(`
-    ALTER TABLE holdings
-      ADD COLUMN IF NOT EXISTS listed_price BIGINT,
-      ADD COLUMN IF NOT EXISTS receipt_status VARCHAR(50) DEFAULT 'active',
-      ADD COLUMN IF NOT EXISTS transfer_status VARCHAR(50) DEFAULT 'settled',
-      ADD COLUMN IF NOT EXISTS listed_at TIMESTAMP
-  `);
+  if (!DATABASE_AVAILABLE) {
+    console.log('⚠️  Skipping schema check - using mock database');
+    return;
+  }
+  try {
+    await query(`
+      ALTER TABLE holdings
+        ADD COLUMN IF NOT EXISTS listed_price BIGINT,
+        ADD COLUMN IF NOT EXISTS receipt_status VARCHAR(50) DEFAULT 'active',
+        ADD COLUMN IF NOT EXISTS transfer_status VARCHAR(50) DEFAULT 'settled',
+        ADD COLUMN IF NOT EXISTS listed_at TIMESTAMP
+    `);
+  } catch (error) {
+    console.error('Schema check failed:', error);
+    DATABASE_AVAILABLE = false;
+  }
 }
 
 // Health check
 app.get('/api/health', async (req: Request, res: Response) => {
-  try {
-    const result = await query('SELECT NOW()');
-    res.json({ status: 'ok', database: 'connected' });
-  } catch (error) {
-    res.status(500).json({ status: 'error', message: 'Database connection failed' });
+  if (DATABASE_AVAILABLE) {
+    try {
+      const result = await query('SELECT NOW()');
+      res.json({ status: 'ok', database: 'connected', provider: 'Supabase PostgreSQL' });
+    } catch (error) {
+      res.status(500).json({ status: 'error', message: 'Database connection failed' });
+    }
+  } else {
+    res.json({ status: 'ok', database: 'mock', provider: 'In-memory mock (dev mode)' });
   }
 });
 
@@ -165,6 +182,12 @@ app.patch('/api/users/:id/artist-status', async (req: Request, res: Response) =>
 // Get all artworks
 app.get('/api/artworks', async (req: Request, res: Response) => {
   try {
+    if (!DATABASE_AVAILABLE) {
+      // Use mock database
+      const artworks = await mockDb.getAllArtworks();
+      return res.json(artworks);
+    }
+    
     const result = await query(`
       SELECT
         a.*,
@@ -191,6 +214,7 @@ app.get('/api/artworks', async (req: Request, res: Response) => {
     `);
     res.json(result.rows);
   } catch (error) {
+    console.error('Artworks fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch artworks' });
   }
 });
@@ -198,6 +222,12 @@ app.get('/api/artworks', async (req: Request, res: Response) => {
 // Get artwork by ID
 app.get('/api/artworks/:id', async (req: Request, res: Response) => {
   try {
+    if (!DATABASE_AVAILABLE) {
+      const artwork = await mockDb.getArtworkById(req.params.id);
+      if (!artwork) return res.status(404).json({ error: 'Artwork not found' });
+      return res.json(artwork);
+    }
+    
     const result = await query(`
       SELECT
         a.*,
@@ -1662,13 +1692,32 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Start server
-ensureRuntimeSchema()
-  .catch((error) => {
-    console.error('Runtime schema check failed:', error);
-  })
-  .finally(() => {
-app.listen(PORT, () => {
-  console.log(`🚀 API server running on http://localhost:${PORT}`);
-  console.log('📊 Database:', process.env.DB_NAME);
-});
+async function startServer() {
+  // Try to connect to database first
+  try {
+    const result = await query('SELECT NOW()');
+    DATABASE_AVAILABLE = true;
+    console.log('✅ Connected to Supabase PostgreSQL');
+  } catch (error) {
+    console.log('⚠️  Supabase connection failed, switching to mock in-memory database');
+    DATABASE_AVAILABLE = false;
+    await mockDb.init();
+    await mockDb.seedDemoData();
+  }
+
+  // Ensure schema if database is available
+  if (DATABASE_AVAILABLE) {
+    await ensureRuntimeSchema().catch((error) => {
+      console.error('Runtime schema check failed:', error);
+    });
+  }
+
+  // Start the server
+  app.listen(PORT, () => {
+    const dbStatus = DATABASE_AVAILABLE ? 'Supabase PostgreSQL' : 'Mock In-Memory (Dev)';
+    console.log(`🚀 API server running on http://localhost:${PORT}`);
+    console.log(`📊 Database: ${dbStatus}`);
   });
+}
+
+startServer().catch(console.error);

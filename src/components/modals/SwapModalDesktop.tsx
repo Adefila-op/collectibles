@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Sparkles,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -30,6 +31,7 @@ export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
     ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0]
   );
   const [message, setMessage] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   function acceptStandingOffer(offer: Offer) {
     if (!user || !ownedHolding) {
@@ -37,13 +39,19 @@ export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
       return;
     }
 
-    proposeSwap(user.id, `standing-${offer.id}`, myArt.id, offer.offeredArt?.id || offer.id);
-    setMessage(`Swap accepted! You'll receive ${fmt(offer.cash)}.`);
-    
+    if (isProcessing) return;
+    setIsProcessing(true);
+
     setTimeout(() => {
-      onOpenChange(false);
-      setMessage("");
-    }, 1500);
+      proposeSwap(user.id, `standing-${offer.id}`, myArt.id, offer.offeredArt?.id || offer.id);
+      setMessage(`Swap accepted! You'll receive ${fmt(offer.cash)}.`);
+      
+      setTimeout(() => {
+        onOpenChange(false);
+        setMessage("");
+        setIsProcessing(false);
+      }, 1500);
+    }, 500);
   }
 
   const matching = useMemo(
@@ -118,9 +126,19 @@ export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
                   </div>
                   <button
                     onClick={() => acceptStandingOffer(top)}
-                    className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110"
+                    disabled={isProcessing}
+                    className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
                   >
-                    Swap for {fmt(top.cash)} →
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        Swap for {fmt(top.cash)} →
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -136,7 +154,8 @@ export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
                   <button
                     key={o.id}
                     onClick={() => acceptStandingOffer(o)}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card hover:border-primary/50 hover:bg-card/80 transition"
+                    disabled={isProcessing}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card hover:border-primary/50 hover:bg-card/80 transition disabled:opacity-50"
                   >
                     <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/15 text-sm font-semibold text-primary flex-shrink-0">
                       {o.buyerInitials}

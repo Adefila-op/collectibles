@@ -871,38 +871,46 @@ function DesktopMarketplace({
             ))}
           </div>
           <div className="mt-auto space-y-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white">
-                  {initials}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold">{userName}</div>
-                  <div className="text-xs text-slate-500">
-                    {artistStatus === "approved" ? "Artist" : artistStatus === "pending" ? "Artist pending" : "Collector"}
+            {isLoggedIn ? (
+              <>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                      {initials}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold">{userName}</div>
+                      <div className="text-xs text-slate-500">
+                        {artistStatus === "approved" ? "Artist" : artistStatus === "pending" ? "Artist pending" : "Collector"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 border-t border-slate-100 pt-4">
+                    <div className="text-xs text-slate-500">Liquid Balance</div>
+                    <div className="mt-1 text-xl font-bold">{walletBalance.toLocaleString()} AC</div>
+                    <div className="text-xs text-slate-500">~ ${(walletBalance / 100).toLocaleString()} USD</div>
                   </div>
                 </div>
-              </div>
-              <div className="mt-5 border-t border-slate-100 pt-4">
-                <div className="text-xs text-slate-500">Liquid Balance</div>
-                <div className="mt-1 text-xl font-bold">{walletBalance.toLocaleString()} AC</div>
-                <div className="text-xs text-slate-500">~ ${(walletBalance / 100).toLocaleString()} USD</div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (isLoggedIn) {
-                  setDepositOpen(true);
-                  setDepositMessage("");
-                } else {
-                  onTopUpClick();
-                }
-              }}
-              className="flex items-center justify-center rounded-2xl bg-primary-grad px-4 py-3 text-sm font-semibold text-white shadow-glow"
-            >
-              Top Up Wallet
-            </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDepositOpen(true);
+                    setDepositMessage("");
+                  }}
+                  className="flex items-center justify-center rounded-2xl bg-primary-grad px-4 py-3 text-sm font-semibold text-white shadow-glow"
+                >
+                  Top Up Wallet
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onTopUpClick}
+                className="flex items-center justify-center rounded-2xl bg-white border border-white/70 px-4 py-3 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 transition"
+              >
+                Sign In
+              </button>
+            )}
           </div>
         </aside>
 

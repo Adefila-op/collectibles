@@ -8,6 +8,18 @@ import {
 } from "react";
 import { userAPI, walletAPI, type User } from "@/lib/api";
 
+// Normalize user data to use camelCase aliases for consistency
+function normalizeUser(user: any): User {
+  if (!user) return user;
+  return {
+    ...user,
+    walletBalance: user.wallet_balance ?? user.walletBalance,
+    walletAddress: user.wallet_address ?? user.walletAddress,
+    artistStatus: user.artist_status ?? user.artistStatus ?? "collector",
+    createdAt: user.created_at ?? user.createdAt,
+  };
+}
+
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
@@ -46,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (sessionStr) {
       try {
         const session = JSON.parse(sessionStr);
-        setUser(session.user);
+        setUser(normalizeUser(session.user));
       } catch (err) {
         console.error("Failed to load session:", err);
       }
@@ -72,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: false, error: error.error || 'Login failed' };
         }
         
-        const user = await response.json();
+        const user = normalizeUser(await response.json());
         localStorage.setItem("artchain_session", JSON.stringify({ user }));
         setUser(user);
         return { ok: true };
@@ -102,15 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
-    // Clear all session data
     localStorage.removeItem("artchain_session");
-    localStorage.removeItem("artchain_users");
-    localStorage.removeItem("artchain_admin");
-    localStorage.removeItem("isAdmin");
-    // Clear user state
     setUser(null);
-    // Dispatch event for other components to react to logout
-    window.dispatchEvent(new Event("logout"));
   }, []);
 
   const updateWalletBalance = useCallback(
@@ -126,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         // Calculate delta from latest balance
-        const delta = nextBalance - (latestUser.wallet_balance || 0);
+        const delta = nextBalance - (latestUser.walletBalance || 0);
         const updatedUser = await userAPI.updateWallet(user.id, delta);
         localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
         setUser(updatedUser);
