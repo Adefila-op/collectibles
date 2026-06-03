@@ -40,7 +40,11 @@ CREATE TABLE IF NOT EXISTS holdings (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   art_id UUID NOT NULL REFERENCES artworks(id) ON DELETE CASCADE,
   status VARCHAR(50) DEFAULT 'owned',
+  listed_price BIGINT,
+  receipt_status VARCHAR(50) DEFAULT 'active',
+  transfer_status VARCHAR(50) DEFAULT 'settled',
   acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  listed_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(user_id, art_id)
 );

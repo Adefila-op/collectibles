@@ -2,7 +2,8 @@ import { AppFrame } from "@/components/AppFrame";
 import { OFFERS, type Offer } from "@/lib/offers-data";
 import { ARTWORKS, getAllArtworks, fmt, type Art } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings, proposeSwap, updateHoldingStatus } from "@/lib/db";
+import { getHoldings } from "@/lib/db";
+import { swapAPI } from "@/lib/api";
 import {
   ArrowDownUp,
   ShieldCheck,
@@ -17,7 +18,7 @@ import { useMemo, useState } from "react";
 type Stage = 0 | 1 | 2 | 3 | 4;
 
 export default function SwapPage() {
-  const { user, updateWalletBalance } = useAuth();
+  const { user } = useAuth();
   const allArtworks = getAllArtworks();
   const query = new URLSearchParams(window.location.search);
   const requestedArtId = query.get("artId");
@@ -31,22 +32,57 @@ export default function SwapPage() {
   const [selected, setSelected] = useState<Offer | null>(null);
   const [stage, setStage] = useState<Stage>(0);
   const [message, setMessage] = useState("");
+  const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  function acceptStandingOffer(offer: Offer) {
+  async function acceptStandingOffer(offer: Offer) {
     if (!user || !ownedHolding) {
       setMessage("Sign in with an owned artwork before accepting a swap offer.");
       return;
     }
 
-    proposeSwap(user.id, `standing-${offer.id}`, myArt.id, offer.offeredArt?.id || offer.id);
-    setSelected(offer);
+    setIsProcessing(true);
+    try {
+      // For now, use the offer data as-is since it's from OFFERS data
+      // In a real system, this would get the actual offerer's ID and artwork
+      // For demo purposes, we'll use placeholder values
+      const buyerId = "placeholder-buyer-id";
+      const buyerArtId = "placeholder-art-id";
+      
+      const result = await swapAPI.propose(
+        user.id,
+        buyerId,
+        ownedHolding.artId,
+        buyerArtId,
+        offer.cash || 0
+      );
+
+      setTransactionId(result.transaction.id);
+      setSelected(offer);
+      setMessage("✓ Swap proposal created! Both artworks locked in escrow.");
+    } catch (error: any) {
+      setMessage(error.message || "Failed to create swap proposal.");
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
-  function releaseSwapFunds(offer: Offer) {
-    if (!user || !ownedHolding) return;
-    updateHoldingStatus(ownedHolding.id, "swapped");
-    // Note: Cash is held in escrow - not directly added to wallet
-    // When swap completes, escrow release happens server-side
+  async function completeSwap() {
+    if (!transactionId) {
+      setMessage("Transaction ID not found.");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const result = await swapAPI.accept(transactionId);
+      setMessage("✓ Swap completed! Artworks exchanged and funds released.");
+      setStage(4);
+    } catch (error: any) {
+      setMessage(error.message || "Failed to complete swap.");
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   const matching = useMemo(() => {
@@ -71,8 +107,11 @@ export default function SwapPage() {
           onBack={() => {
             setSelected(null);
             setStage(0);
+            setTransactionId(null);
           }}
-          onComplete={releaseSwapFunds}
+          onComplete={completeSwap}
+          isProcessing={isProcessing}
+          message={message}
         />
       </AppFrame>
     );
@@ -141,9 +180,10 @@ export default function SwapPage() {
                 </div>
                 <button
                   onClick={() => acceptStandingOffer(top)}
-                  className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110"
+                  disabled={isProcessing}
+                  className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
                 >
-                  Swap for {fmt(top.cash)} →
+                  {isProcessing ? "Creating swap..." : `Swap for ${fmt(top.cash)} →`}
                 </button>
               </div>
             )}
@@ -158,7 +198,8 @@ export default function SwapPage() {
                 <button
                   key={o.id}
                   onClick={() => acceptStandingOffer(o)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card hover-lift"
+                  disabled={isProcessing}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card hover-lift disabled:opacity-50"
                 >
                   <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
                     {o.buyerInitials}
@@ -181,12 +222,12 @@ export default function SwapPage() {
         )}
 
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-[11px] text-emerald-700">
-          <ShieldCheck className="mr-1 inline h-3.5 w-3.5" /> Funds locked in escrow the moment you
-          accept. Released after buyer confirms condition.
+          <ShieldCheck className="mr-1 inline h-3.5 w-3.5" /> Funds and artworks locked in escrow the moment you
+          accept. Exchanged when both parties confirm.
         </div>
 
         {message && (
-          <div className="rounded-2xl bg-primary/10 p-3 text-xs font-semibold text-primary">
+          <div className={`rounded-2xl p-3 text-xs font-semibold ${message.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-600' : 'bg-primary/10 text-primary'}`}>
             {message}
           </div>
         )}
@@ -202,25 +243,33 @@ function AcceptedFlow({
   setStage,
   onBack,
   onComplete,
+  isProcessing,
+  message,
 }: {
   offer: Offer;
   art: Art;
   stage: Stage;
   setStage: (s: Stage) => void;
   onBack: () => void;
-  onComplete: (offer: Offer) => void;
+  onComplete: () => Promise<void>;
+  isProcessing: boolean;
+  message: string;
 }) {
   const steps = [
-    { icon: CheckCircle2, t: "Offer accepted onchain", d: "Buyer notified instantly" },
-    { icon: Truck, t: "Ship piece to COllectible vault", d: "Drop-off at Lagos hub" },
-    { icon: ShieldCheck, t: "Condition reviewed", d: "Buyer notified of audit result" },
-    { icon: Sparkles, t: "Buyer approves", d: "Token transferred onchain" },
-    { icon: Coins, t: "Funds released to you", d: `${fmt(offer.cash)} sent to your wallet` },
+    { icon: CheckCircle2, t: "Swap accepted onchain", d: "Both parties notified instantly" },
+    { icon: Truck, t: "Artworks locked in escrow", d: "Both pieces secured in vault" },
+    { icon: ShieldCheck, t: "Conditions verified", d: "Both artworks confirmed received" },
+    { icon: Sparkles, t: "Exchange confirmed", d: "Both parties approve swap" },
+    { icon: Coins, t: "Swap completed", d: `Artworks and funds exchanged` },
   ];
 
-  const next = () => {
-    if (stage === 3) onComplete(offer);
-    if (stage < 4) setStage((stage + 1) as Stage);
+  const handleComplete = async () => {
+    if (stage === 3) {
+      await onComplete();
+      setStage(4);
+    } else if (stage < 4) {
+      setStage((stage + 1) as Stage);
+    }
   };
 
   return (
@@ -250,7 +299,7 @@ function AcceptedFlow({
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-        <div className="mb-3 text-xs font-semibold">Escrow progress</div>
+        <div className="mb-3 text-xs font-semibold">Swap progress</div>
         <div className="space-y-3">
           {steps.map((s, i) => {
             const done = i < stage;
@@ -289,24 +338,30 @@ function AcceptedFlow({
         </div>
       </div>
 
+      {message && (
+        <div className={`rounded-2xl p-3 text-xs font-semibold ${message.startsWith('✓') ? 'bg-emerald-500/10 text-emerald-600' : 'bg-primary/10 text-primary'}`}>
+          {message}
+        </div>
+      )}
+
       {stage < 4 ? (
         <button
-          onClick={next}
-          className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow"
+          onClick={handleComplete}
+          disabled={isProcessing}
+          className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow disabled:opacity-50"
         >
-          {stage === 0 && "Print shipping label →"}
-          {stage === 1 && "Mark as delivered to vault →"}
-          {stage === 2 && "Awaiting buyer approval →"}
-          {stage === 3 && "Release funds →"}
+          {isProcessing ? "Processing..." : stage === 0 && "Confirm swap →"}
+          {!isProcessing && stage === 1 && "Mark artworks locked →"}
+          {!isProcessing && stage === 2 && "Verify conditions →"}
+          {!isProcessing && stage === 3 && "Complete swap →"}
         </button>
       ) : (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center text-sm text-emerald-700">
-          <CheckCircle2 className="mx-auto mb-1 h-5 w-5" />
-          <div className="font-semibold">{fmt(offer.cash)} settled to your wallet</div>
-          <div className="text-[11px] text-emerald-700/80">
-            Token transferred to {offer.buyer}
-          </div>
-        </div>
+        <button
+          onClick={onBack}
+          className="w-full rounded-2xl border border-primary/30 bg-primary/5 py-3 text-sm font-semibold text-primary"
+        >
+          Back to offers
+        </button>
       )}
     </div>
   );

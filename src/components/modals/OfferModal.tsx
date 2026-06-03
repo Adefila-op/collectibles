@@ -1,16 +1,10 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getArt, fmt } from "@/lib/art-data";
-import { useAuth } from "@/contexts/AuthContext";
-import { createOffer } from "@/lib/db";
 import { Send } from "lucide-react";
-import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { fmt } from "@/lib/art-data";
+import { artAPI, offersAPI, type Art } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface OfferModalProps {
   open: boolean;
@@ -21,9 +15,58 @@ interface OfferModalProps {
 export function OfferModal({ open, onOpenChange, artId }: OfferModalProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const targetArt = artId ? getArt(artId) : null;
-  const [offerAmount, setOfferAmount] = useState(targetArt ? String(targetArt.price) : "");
+  const [targetArt, setTargetArt] = useState<Art | null>(null);
+  const [offerAmount, setOfferAmount] = useState("");
   const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open || !artId) return;
+
+    async function fetchArt() {
+      try {
+        const artwork = await artAPI.getById(artId as string);
+        setTargetArt(artwork);
+        setOfferAmount(String(artwork.price || ""));
+      } catch (error) {
+        console.error("Failed to fetch offer artwork:", error);
+        setTargetArt(null);
+      }
+    }
+
+    fetchArt();
+  }, [artId, open]);
+
+  async function handlePlaceOffer() {
+    if (!user || !targetArt) return;
+    if (isSubmitting) return;
+
+    const amount = parseInt(offerAmount.replace(/[^0-9]/g, ""));
+    if (Number.isNaN(amount) || amount <= 0) {
+      setMessage("Please enter a valid offer amount.");
+      return;
+    }
+
+    if (amount > (user.walletBalance || 0)) {
+      setMessage("Insufficient balance. Deposit more funds to place this offer.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage("");
+    try {
+      await offersAPI.create(user.id, targetArt.id, amount);
+      setMessage(`Offer placed for ${fmt(amount)}. Funds are held in escrow.`);
+      setTimeout(() => {
+        onOpenChange(false);
+        setMessage("");
+      }, 1400);
+    } catch (error: any) {
+      setMessage(error.message || "Failed to place offer.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   if (!user) {
     return (
@@ -33,7 +76,7 @@ export function OfferModal({ open, onOpenChange, artId }: OfferModalProps) {
             <DialogTitle>Make Offer</DialogTitle>
             <DialogDescription>Sign in to make offers on artwork</DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground text-center">Please sign in to make offers</p>
+          <p className="text-center text-sm text-muted-foreground">Please sign in to make offers</p>
         </DialogContent>
       </Dialog>
     );
@@ -45,35 +88,25 @@ export function OfferModal({ open, onOpenChange, artId }: OfferModalProps) {
         <DialogContent className="max-w-[400px] rounded-3xl border-0">
           <DialogHeader>
             <DialogTitle>Make Offer</DialogTitle>
-            <DialogDescription>Artwork not found</DialogDescription>
+            <DialogDescription>Select an artwork to make an offer</DialogDescription>
           </DialogHeader>
+          <button
+            onClick={() => {
+              onOpenChange(false);
+              navigate("/explore");
+            }}
+            className="mt-2 w-full rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white"
+          >
+            Browse artworks
+          </button>
         </DialogContent>
       </Dialog>
     );
   }
 
-  function handlePlaceOffer() {
-    if (!user || !targetArt || !artId) return;
-
-    const amount = parseInt(offerAmount.replace(/[^0-9]/g, ""));
-    if (Number.isNaN(amount) || amount <= 0) {
-      setMessage("Please enter a valid offer amount.");
-      return;
-    }
-
-    if (amount > user.wallet_balance) {
-      setMessage("Deposit more funds before placing an offer this large.");
-      return;
-    }
-
-    createOffer(artId, user.id, amount);
-    setMessage(`Offer placed for ${fmt(amount)} on ${targetArt.name}.`);
-    onOpenChange(false);
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[500px] rounded-3xl border-0 max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-h-[80vh] max-w-[500px] overflow-y-auto rounded-3xl border-0">
         <DialogHeader>
           <DialogTitle>Make an Offer</DialogTitle>
           <DialogDescription>Offer amount for {targetArt.name}</DialogDescription>
@@ -87,7 +120,7 @@ export function OfferModal({ open, onOpenChange, artId }: OfferModalProps) {
               <div className="flex-1">
                 <div className="text-sm font-semibold">{targetArt.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  by {targetArt.artist} - {targetArt.city}
+                  by {targetArt.artist} · {targetArt.city}
                 </div>
                 <div className="mt-1 text-xs font-semibold text-primary">{fmt(targetArt.price)}</div>
               </div>
@@ -96,26 +129,22 @@ export function OfferModal({ open, onOpenChange, artId }: OfferModalProps) {
 
           <div className="space-y-2">
             <label className="text-sm font-semibold">Offer amount</label>
-            <div className="relative">
-              <input
-                type="number"
-                value={offerAmount}
-                onChange={(e) => {
-                  setOfferAmount(e.target.value);
-                  setMessage("");
-                }}
-                className="w-full rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                placeholder="Amount in USDC"
-              />
-            </div>
+            <input
+              type="number"
+              value={offerAmount}
+              onChange={(event) => {
+                setOfferAmount(event.target.value);
+                setMessage("");
+              }}
+              className="w-full rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="Amount"
+            />
           </div>
 
           {message && (
             <div
               className={`rounded-2xl p-3 text-sm ${
-                message.includes("Offer placed")
-                  ? "bg-emerald-500/10 text-emerald-700"
-                  : "bg-red-500/10 text-red-700"
+                message.includes("placed") ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-700"
               }`}
             >
               {message}
@@ -131,9 +160,10 @@ export function OfferModal({ open, onOpenChange, artId }: OfferModalProps) {
             </button>
             <button
               onClick={handlePlaceOffer}
-              className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary/90"
+              disabled={isSubmitting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-50"
             >
-              <Send className="h-4 w-4" /> Place Offer
+              <Send className="h-4 w-4" /> {isSubmitting ? "Placing..." : "Place Offer"}
             </button>
           </div>
         </div>

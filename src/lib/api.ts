@@ -14,7 +14,18 @@ function addUserAliases(user: any): any {
 
 function addArtAliases(art: any): any {
   if (!art) return art;
-  return { ...art };
+  return {
+    ...art,
+    uniqueId: art.unique_id,
+    currentOwnerId: art.current_owner_id,
+    holdingId: art.holding_id,
+    holdingStatus: art.holding_status,
+    listedPrice: art.listed_price,
+    receiptStatus: art.receipt_status,
+    transferStatus: art.transfer_status,
+    marketPrice: art.market_price,
+    price: art.market_price ?? art.listed_price ?? art.price,
+  };
 }
 
 // Types
@@ -53,6 +64,21 @@ export interface Art {
   image: string;
   description: string;
   unique_id: string;
+  current_owner_id?: string;
+  holding_id?: string;
+  holding_status?: string;
+  listed_price?: number;
+  receipt_status?: string;
+  transfer_status?: string;
+  market_price?: number;
+  uniqueId?: string;
+  currentOwnerId?: string;
+  holdingId?: string;
+  holdingStatus?: string;
+  listedPrice?: number;
+  receiptStatus?: string;
+  transferStatus?: string;
+  marketPrice?: number;
 }
 
 export interface Transaction {
@@ -117,17 +143,41 @@ export const userAPI = {
 
 // Artwork API
 export const artAPI = {
-  getAll: () => apiCall('/api/artworks'),
-  getById: (id: string) => apiCall(`/api/artworks/${id}`),
+  getAll: async () => {
+    const artworks = await apiCall('/api/artworks');
+    return artworks.map(addArtAliases);
+  },
+  getById: async (id: string) => {
+    const artwork = await apiCall(`/api/artworks/${id}`);
+    return addArtAliases(artwork);
+  },
+  create: async (data: any) => {
+    const result = await apiCall('/api/artworks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return {
+      ...result,
+      artwork: addArtAliases(result.artwork),
+    };
+  },
 };
 
 // Holdings API
 export const holdingsAPI = {
-  getByUserId: (userId: string) => apiCall(`/api/holdings/${userId}`),
+  getByUserId: async (userId: string) => {
+    const holdings = await apiCall(`/api/holdings/${userId}`);
+    return holdings.map(addArtAliases);
+  },
   create: (userId: string, artId: string, status: string = 'owned') =>
     apiCall('/api/holdings', {
       method: 'POST',
       body: JSON.stringify({ userId, artId, status }),
+    }),
+  update: (holdingId: string, userId: string, data: { status: string; listedPrice?: number }) =>
+    apiCall(`/api/holdings/${holdingId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ userId, ...data }),
     }),
 };
 
@@ -157,6 +207,23 @@ export const purchaseAPI = {
     apiCall('/api/buy', {
       method: 'POST',
       body: JSON.stringify({ buyerId, artId, amount, sellerId }),
+    }),
+};
+
+// Swap API
+export const swapAPI = {
+  propose: (userId1: string, userId2: string, artId1: string, artId2: string, cashAmount: number = 0) =>
+    apiCall('/api/swap', {
+      method: 'POST',
+      body: JSON.stringify({ userId1, userId2, artId1, artId2, cashAmount }),
+    }),
+  accept: (transactionId: string) =>
+    apiCall(`/api/swap/${transactionId}/accept`, {
+      method: 'PATCH',
+    }),
+  reject: (transactionId: string) =>
+    apiCall(`/api/swap/${transactionId}/reject`, {
+      method: 'PATCH',
     }),
 };
 

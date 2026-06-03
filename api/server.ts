@@ -21,6 +21,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+async function ensureRuntimeSchema() {
+  await query(`
+    ALTER TABLE holdings
+      ADD COLUMN IF NOT EXISTS listed_price BIGINT,
+      ADD COLUMN IF NOT EXISTS receipt_status VARCHAR(50) DEFAULT 'active',
+      ADD COLUMN IF NOT EXISTS transfer_status VARCHAR(50) DEFAULT 'settled',
+      ADD COLUMN IF NOT EXISTS listed_at TIMESTAMP
+  `);
+}
+
 // Health check
 app.get('/api/health', async (req: Request, res: Response) => {
   try {
@@ -122,7 +132,30 @@ app.patch('/api/users/:id/artist-status', async (req: Request, res: Response) =>
 // Get all artworks
 app.get('/api/artworks', async (req: Request, res: Response) => {
   try {
-    const result = await query('SELECT * FROM artworks ORDER BY created_at DESC');
+    const result = await query(`
+      SELECT
+        a.*,
+        h.id AS holding_id,
+        h.user_id AS current_owner_id,
+        h.status AS holding_status,
+        h.listed_price,
+        h.receipt_status,
+        h.transfer_status,
+        h.acquired_at,
+        h.listed_at,
+        COALESCE(h.listed_price, a.price) AS market_price
+      FROM artworks a
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM holdings
+        WHERE art_id = a.id
+          AND receipt_status = 'active'
+          AND status <> 'swapped'
+        ORDER BY acquired_at DESC
+        LIMIT 1
+      ) h ON true
+      ORDER BY a.created_at DESC
+    `);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch artworks' });
@@ -132,7 +165,30 @@ app.get('/api/artworks', async (req: Request, res: Response) => {
 // Get artwork by ID
 app.get('/api/artworks/:id', async (req: Request, res: Response) => {
   try {
-    const result = await query('SELECT * FROM artworks WHERE id = $1 OR token = $1', [req.params.id]);
+    const result = await query(`
+      SELECT
+        a.*,
+        h.id AS holding_id,
+        h.user_id AS current_owner_id,
+        h.status AS holding_status,
+        h.listed_price,
+        h.receipt_status,
+        h.transfer_status,
+        h.acquired_at,
+        h.listed_at,
+        COALESCE(h.listed_price, a.price) AS market_price
+      FROM artworks a
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM holdings
+        WHERE art_id = a.id
+          AND receipt_status = 'active'
+          AND status <> 'swapped'
+        ORDER BY acquired_at DESC
+        LIMIT 1
+      ) h ON true
+      WHERE a.id::text = $1 OR a.token = $1
+    `, [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Artwork not found' });
     }
@@ -142,15 +198,94 @@ app.get('/api/artworks/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Create artwork and optionally list it immediately
+app.post('/api/artworks', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const {
+      userId,
+      name,
+      artist,
+      category,
+      city,
+      year,
+      price,
+      image,
+      description,
+      collectionType,
+      supplyName,
+      listImmediately = true,
+    } = req.body;
+
+    if (!userId || !name || !artist || !category || !city || !year || !price) {
+      return res.status(400).json({ error: 'Missing artwork fields' });
+    }
+
+    await client.query('BEGIN');
+
+    const token = `art-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    const uniqueId = `ART-${String(name).toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 24)}-${Date.now().toString().slice(-6)}`;
+    const artResult = await client.query(
+      `INSERT INTO artworks (token, name, artist, category, city, year, price, image, description, unique_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [
+        token,
+        name,
+        artist,
+        category,
+        city,
+        Number(year),
+        Number(price),
+        image || '',
+        description || `${collectionType || 'Artwork'}${supplyName ? ` - ${supplyName}` : ''}`,
+        uniqueId,
+      ]
+    );
+    const artwork = artResult.rows[0];
+
+    const holdingResult = await client.query(
+      `INSERT INTO holdings (user_id, art_id, status, listed_price, receipt_status, transfer_status, listed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $3 = 'listed' THEN CURRENT_TIMESTAMP ELSE NULL END)
+       RETURNING *`,
+      [userId, artwork.id, listImmediately ? 'listed' : 'owned', Number(price), 'active', 'settled']
+    );
+
+    await client.query('COMMIT');
+    res.status(201).json({ artwork, holding: holdingResult.rows[0] });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Artwork creation error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create artwork' });
+  } finally {
+    client.release();
+  }
+});
+
 // ========== Holdings API ==========
 
 // Get user holdings
 app.get('/api/holdings/:userId', async (req: Request, res: Response) => {
   try {
     const result = await query(
-      `SELECT h.*, a.* FROM holdings h
+      `SELECT
+        h.id AS holding_id,
+        h.user_id,
+        h.art_id,
+        h.status AS holding_status,
+        h.status,
+        h.listed_price,
+        h.receipt_status,
+        h.transfer_status,
+        h.acquired_at,
+        h.listed_at,
+        h.created_at AS holding_created_at,
+        a.*
+       FROM holdings h
        JOIN artworks a ON h.art_id = a.id
        WHERE h.user_id = $1
+         AND h.receipt_status = 'active'
+         AND h.status <> 'swapped'
        ORDER BY h.acquired_at DESC`,
       [req.params.userId]
     );
@@ -165,15 +300,47 @@ app.post('/api/holdings', async (req: Request, res: Response) => {
   const { userId, artId, status } = req.body;
   try {
     const result = await query(
-      `INSERT INTO holdings (user_id, art_id, status)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, art_id) DO UPDATE SET status = $3
+      `INSERT INTO holdings (user_id, art_id, status, receipt_status, transfer_status)
+       VALUES ($1, $2, $3, 'active', 'settled')
+       ON CONFLICT (user_id, art_id)
+       DO UPDATE SET status = $3, receipt_status = 'active', transfer_status = 'settled'
        RETURNING *`,
       [userId, artId, status || 'owned']
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create holding' });
+  }
+});
+
+// Update a holding into a listing or owned item
+app.patch('/api/holdings/:holdingId', async (req: Request, res: Response) => {
+  const { holdingId } = req.params;
+  const { userId, status, listedPrice } = req.body;
+
+  if (!userId || !status) {
+    return res.status(400).json({ error: 'Missing holding update fields' });
+  }
+
+  try {
+    const result = await query(
+      `UPDATE holdings
+       SET status = $1,
+           listed_price = CASE WHEN $1 = 'listed' THEN $2 ELSE listed_price END,
+           listed_at = CASE WHEN $1 = 'listed' THEN CURRENT_TIMESTAMP ELSE listed_at END,
+           transfer_status = CASE WHEN $1 = 'listed' THEN 'listed' ELSE transfer_status END
+       WHERE id = $3 AND user_id = $4 AND receipt_status = 'active'
+       RETURNING *`,
+      [status, listedPrice || null, holdingId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Holding not found for this user' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update holding' });
   }
 });
 
@@ -229,10 +396,24 @@ app.post('/api/offers', async (req: Request, res: Response) => {
 
     // Get current owner of artwork
     const holdingResult = await client.query(
-      'SELECT user_id FROM holdings WHERE art_id = $1 AND status = $2 ORDER BY acquired_at DESC LIMIT 1',
-      [artId, 'owned']
+      `SELECT user_id
+       FROM holdings
+       WHERE art_id = $1
+         AND status IN ('owned', 'listed')
+         AND receipt_status = 'active'
+       ORDER BY acquired_at DESC
+       LIMIT 1`,
+      [artId]
     );
     const sellerId = holdingResult.rows.length > 0 ? holdingResult.rows[0].user_id : null;
+
+    if (!sellerId) {
+      return res.status(400).json({ error: 'Artwork has no active collector to receive offers' });
+    }
+
+    if (sellerId === buyerId) {
+      return res.status(400).json({ error: 'You already hold this artwork' });
+    }
 
     await client.query('BEGIN');
 
@@ -306,6 +487,11 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
     }
     const offer = offerResult.rows[0];
 
+    if (offer.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Offer is no longer pending' });
+    }
+
     // Get transaction
     const txResult = await client.query(
       'SELECT * FROM transactions WHERE offer_id = $1 FOR UPDATE',
@@ -328,17 +514,23 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
     }
     const escrow = escrowResult.rows[0];
 
-    // Calculate fee (10% platform fee)
-    const platformFee = Math.floor(escrow.amount * 0.1);
-    const sellerAmount = escrow.amount - platformFee;
-
-    // Transfer art to buyer
+    // Transfer the active provenance receipt to the buyer immediately.
+    // Funds remain in escrow while the physical work moves through verification.
     const artTransferResult = await client.query(
       `UPDATE holdings 
-       SET user_id = $1, acquired_at = CURRENT_TIMESTAMP 
-       WHERE art_id = $2 AND user_id = $3 AND status = $4
+       SET user_id = $1,
+           status = 'owned',
+           listed_price = NULL,
+           listed_at = NULL,
+           receipt_status = 'active',
+           transfer_status = 'verification_pending',
+           acquired_at = CURRENT_TIMESTAMP
+       WHERE art_id = $2
+         AND user_id = $3
+         AND status IN ('owned', 'listed')
+         AND receipt_status = 'active'
        RETURNING *`,
-      [offer.buyer_id, offer.art_id, sellerId, 'owned']
+      [offer.buyer_id, offer.art_id, sellerId]
     );
 
     if (artTransferResult.rows.length === 0) {
@@ -346,16 +538,10 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Artwork not found or seller not owner' });
     }
 
-    // Release escrow to seller
+    // Keep escrow held until vault/admin verification releases funds.
     await client.query(
-      'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
-      [sellerAmount, sellerId]
-    );
-
-    // Update escrow status
-    await client.query(
-      `UPDATE escrow SET status = $1, released_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      ['released', escrow.id]
+      `UPDATE escrow SET status = $1 WHERE id = $2`,
+      ['verification_pending', escrow.id]
     );
 
     // Update offer status
@@ -363,19 +549,20 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
 
     // Update transaction status
     await client.query(
-      `UPDATE transactions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      ['completed', tx.id]
+      `UPDATE transactions SET status = $1 WHERE id = $2`,
+      ['verification_pending', tx.id]
     );
 
     await client.query('COMMIT');
 
     res.json({
       offer: { ...offer, status: 'accepted' },
-      transaction: { ...tx, status: 'completed' },
-      escrow: { ...escrow, status: 'released' },
-      sellerReceived: sellerAmount,
-      platformFee: platformFee,
-      message: 'Offer accepted. Funds released to seller. Art transferred to buyer.'
+      transaction: { ...tx, status: 'verification_pending' },
+      escrow: { ...escrow, status: 'verification_pending' },
+      holding: artTransferResult.rows[0],
+      sellerReceived: 0,
+      platformFee: 0,
+      message: 'Offer accepted. Provenance receipt transferred. Funds remain in escrow while art is in transit for verification.'
     });
   } catch (error: any) {
     await client.query('ROLLBACK');
@@ -501,8 +688,13 @@ app.post('/api/buy', async (req: Request, res: Response) => {
     }
 
     const holdingResult = await client.query(
-      'SELECT * FROM holdings WHERE art_id = $1 AND user_id = $2 AND status = $3',
-      [artId, sellerId, 'owned']
+      `SELECT *
+       FROM holdings
+       WHERE art_id = $1
+         AND user_id = $2
+         AND status IN ('owned', 'listed')
+         AND receipt_status = 'active'`,
+      [artId, sellerId]
     );
     if (holdingResult.rows.length === 0) {
       return res.status(400).json({ error: 'Seller does not own this artwork or it is not for sale' });
@@ -534,12 +726,27 @@ app.post('/api/buy', async (req: Request, res: Response) => {
     );
 
     // Transfer art to buyer immediately (direct purchase, no seller approval needed)
-    await client.query(
+    const transferResult = await client.query(
       `UPDATE holdings 
-       SET user_id = $1, acquired_at = CURRENT_TIMESTAMP 
-       WHERE art_id = $2 AND user_id = $3 AND status = $4`,
-      [buyerId, artId, sellerId, 'owned']
+       SET user_id = $1,
+           status = 'owned',
+           listed_price = NULL,
+           listed_at = NULL,
+           receipt_status = 'active',
+           transfer_status = 'shipping',
+           acquired_at = CURRENT_TIMESTAMP
+       WHERE art_id = $2
+         AND user_id = $3
+         AND status IN ('owned', 'listed')
+         AND receipt_status = 'active'
+       RETURNING *`,
+      [buyerId, artId, sellerId]
     );
+
+    if (transferResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Artwork transfer failed' });
+    }
 
     // Calculate fee (10% platform fee)
     const platformFee = Math.floor(amount * 0.1);
@@ -568,14 +775,314 @@ app.post('/api/buy', async (req: Request, res: Response) => {
     res.status(201).json({
       transaction: { ...tx, status: 'completed' },
       escrow: { ...escrowResult.rows[0], status: 'released' },
+      holding: transferResult.rows[0],
       sellerReceived: sellerAmount,
       platformFee: platformFee,
-      message: 'Purchase successful. Art transferred and funds released to seller.'
+      message: 'Purchase successful. Provenance receipt transferred instantly and physical artwork is marked for shipping.'
     });
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error('Purchase error:', error);
     res.status(500).json({ error: error.message || 'Failed to complete purchase' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== Swap API ==========
+
+// Propose a swap (create bidirectional escrow)
+app.post('/api/swap', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { userId1, userId2, artId1, artId2, cashAmount } = req.body;
+    
+    if (!userId1 || !userId2 || !artId1 || !artId2 || cashAmount < 0) {
+      return res.status(400).json({ error: 'Missing or invalid swap fields' });
+    }
+
+    if (userId1 === userId2) {
+      return res.status(400).json({ error: 'Cannot swap with yourself' });
+    }
+
+    // Check both users exist
+    const user1Result = await client.query('SELECT id FROM users WHERE id = $1', [userId1]);
+    const user2Result = await client.query('SELECT id FROM users WHERE id = $1', [userId2]);
+    if (user1Result.rows.length === 0 || user2Result.rows.length === 0) {
+      return res.status(404).json({ error: 'One or both users not found' });
+    }
+
+    // Check both artworks exist
+    const art1Result = await client.query('SELECT id FROM artworks WHERE id = $1', [artId1]);
+    const art2Result = await client.query('SELECT id FROM artworks WHERE id = $1', [artId2]);
+    if (art1Result.rows.length === 0 || art2Result.rows.length === 0) {
+      return res.status(404).json({ error: 'One or both artworks not found' });
+    }
+
+    // Check user1 owns art1
+    const holding1Result = await client.query(
+      'SELECT id FROM holdings WHERE art_id = $1 AND user_id = $2 AND status = $3',
+      [artId1, userId1, 'owned']
+    );
+    if (holding1Result.rows.length === 0) {
+      return res.status(400).json({ error: 'User 1 does not own artwork 1 or it is not for sale' });
+    }
+
+    // Check user2 owns art2
+    const holding2Result = await client.query(
+      'SELECT id FROM holdings WHERE art_id = $1 AND user_id = $2 AND status = $3',
+      [artId2, userId2, 'owned']
+    );
+    if (holding2Result.rows.length === 0) {
+      return res.status(400).json({ error: 'User 2 does not own artwork 2 or it is not for sale' });
+    }
+
+    // If there's a cash component, verify user2 has sufficient balance
+    if (cashAmount > 0) {
+      const user2BalanceResult = await client.query('SELECT wallet_balance FROM users WHERE id = $1', [userId2]);
+      if (user2BalanceResult.rows[0].wallet_balance < cashAmount) {
+        return res.status(400).json({ error: 'User 2 has insufficient balance for cash component' });
+      }
+    }
+
+    await client.query('BEGIN');
+
+    // Create swap transaction
+    const txResult = await client.query(
+      `INSERT INTO transactions (type, buyer_id, seller_id, amount, art_id, status, details)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      ['swap', userId1, userId2, cashAmount, artId1, 'pending', JSON.stringify({ 
+        artId1: artId1, 
+        artId2: artId2, 
+        userId1: userId1, 
+        userId2: userId2, 
+        cashAmount: cashAmount 
+      })]
+    );
+    const tx = txResult.rows[0];
+
+    // Create escrow for art1 (user1 -> user2)
+    const escrow1Result = await client.query(
+      `INSERT INTO escrow (transaction_id, amount, from_user_id, to_user_id, art_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [tx.id, 0, userId1, userId2, artId1, 'held']
+    );
+
+    // Create escrow for art2 (user2 -> user1)
+    const escrow2Result = await client.query(
+      `INSERT INTO escrow (transaction_id, amount, from_user_id, to_user_id, art_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [tx.id, cashAmount, userId2, userId1, artId2, 'held']
+    );
+
+    // If there's a cash component, deduct from user2
+    if (cashAmount > 0) {
+      await client.query(
+        'UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2',
+        [cashAmount, userId2]
+      );
+    }
+
+    await client.query('COMMIT');
+    
+    res.status(201).json({
+      transaction: tx,
+      escrows: [escrow1Result.rows[0], escrow2Result.rows[0]],
+      message: 'Swap proposal created. Both artworks and funds held in escrow.'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Swap creation error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create swap' });
+  } finally {
+    client.release();
+  }
+});
+
+// Accept swap (complete bidirectional exchange)
+app.patch('/api/swap/:transactionId/accept', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { transactionId } = req.params;
+
+    if (!transactionId) {
+      return res.status(400).json({ error: 'Missing transactionId' });
+    }
+
+    await client.query('BEGIN');
+
+    // Get transaction
+    const txResult = await client.query(
+      'SELECT * FROM transactions WHERE id = $1 FOR UPDATE',
+      [transactionId]
+    );
+    if (txResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    const tx = txResult.rows[0];
+
+    // Get swap details
+    const details = JSON.parse(tx.details);
+    const { artId1, artId2, userId1, userId2, cashAmount } = details;
+
+    // Get both escrows
+    const escrowsResult = await client.query(
+      'SELECT * FROM escrow WHERE transaction_id = $1 FOR UPDATE ORDER BY created_at ASC',
+      [transactionId]
+    );
+    if (escrowsResult.rows.length < 2) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Swap escrows not found' });
+    }
+    const escrow1 = escrowsResult.rows[0]; // art1 to user2
+    const escrow2 = escrowsResult.rows[1]; // art2 to user1
+
+    // Transfer art1 from user1 to user2
+    const transfer1Result = await client.query(
+      `UPDATE holdings 
+       SET user_id = $1, acquired_at = CURRENT_TIMESTAMP 
+       WHERE art_id = $2 AND user_id = $3 AND status = $4
+       RETURNING *`,
+      [userId2, artId1, userId1, 'owned']
+    );
+
+    if (transfer1Result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Artwork 1 transfer failed' });
+    }
+
+    // Transfer art2 from user2 to user1
+    const transfer2Result = await client.query(
+      `UPDATE holdings 
+       SET user_id = $1, acquired_at = CURRENT_TIMESTAMP 
+       WHERE art_id = $2 AND user_id = $3 AND status = $4
+       RETURNING *`,
+      [userId1, artId2, userId2, 'owned']
+    );
+
+    if (transfer2Result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Artwork 2 transfer failed' });
+    }
+
+    // If there's a cash component, transfer to user1
+    if (cashAmount > 0) {
+      // Calculate 10% platform fee
+      const platformFee = Math.floor(cashAmount * 0.1);
+      const user1Amount = cashAmount - platformFee;
+
+      await client.query(
+        'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
+        [user1Amount, userId1]
+      );
+    }
+
+    // Mark both escrows as released
+    await client.query(
+      `UPDATE escrow SET status = $1, released_at = CURRENT_TIMESTAMP WHERE id = $2 OR id = $3`,
+      ['released', escrow1.id, escrow2.id]
+    );
+
+    // Update transaction status
+    await client.query(
+      `UPDATE transactions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['completed', transactionId]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      transaction: { ...tx, status: 'completed' },
+      escrows: [
+        { ...escrow1, status: 'released' },
+        { ...escrow2, status: 'released' }
+      ],
+      artworksExchanged: {
+        to_user1: artId2,
+        to_user2: artId1
+      },
+      cashTransferred: cashAmount > 0 ? cashAmount - Math.floor(cashAmount * 0.1) : 0,
+      platformFee: cashAmount > 0 ? Math.floor(cashAmount * 0.1) : 0,
+      message: 'Swap completed successfully. Artworks exchanged and escrow released.'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Swap completion error:', error);
+    res.status(500).json({ error: error.message || 'Failed to complete swap' });
+  } finally {
+    client.release();
+  }
+});
+
+// Reject swap (refund both parties)
+app.patch('/api/swap/:transactionId/reject', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { transactionId } = req.params;
+
+    if (!transactionId) {
+      return res.status(400).json({ error: 'Missing transactionId' });
+    }
+
+    await client.query('BEGIN');
+
+    // Get transaction
+    const txResult = await client.query(
+      'SELECT * FROM transactions WHERE id = $1 FOR UPDATE',
+      [transactionId]
+    );
+    if (txResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    const tx = txResult.rows[0];
+
+    // Get swap details
+    const details = JSON.parse(tx.details);
+    const { userId2, cashAmount } = details;
+
+    // Get escrows
+    const escrowsResult = await client.query(
+      'SELECT * FROM escrow WHERE transaction_id = $1 FOR UPDATE',
+      [transactionId]
+    );
+
+    // Refund cash component if exists
+    if (cashAmount > 0) {
+      await client.query(
+        'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
+        [cashAmount, userId2]
+      );
+    }
+
+    // Mark escrows as refunded
+    escrowsResult.rows.forEach(async (escrow) => {
+      await client.query(
+        `UPDATE escrow SET status = $1, released_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        ['refunded', escrow.id]
+      );
+    });
+
+    // Update transaction status
+    await client.query(
+      `UPDATE transactions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      ['refunded', transactionId]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      transaction: { ...tx, status: 'refunded' },
+      message: 'Swap rejected. All parties refunded.'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Swap rejection error:', error);
+    res.status(500).json({ error: error.message || 'Failed to reject swap' });
   } finally {
     client.release();
   }
@@ -712,6 +1219,15 @@ app.patch('/api/escrow/:id/release', async (req: Request, res: Response) => {
       `UPDATE escrow SET status = $1, released_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
       ['released', req.params.id]
     );
+
+    if (escrow.art_id) {
+      await client.query(
+        `UPDATE holdings
+         SET transfer_status = 'verified'
+         WHERE art_id = $1 AND user_id = $2 AND receipt_status = 'active'`,
+        [escrow.art_id, escrow.from_user_id]
+      );
+    }
     
     await client.query('COMMIT');
     res.json(updateResult.rows[0]);
@@ -988,7 +1504,13 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Start server
+ensureRuntimeSchema()
+  .catch((error) => {
+    console.error('Runtime schema check failed:', error);
+  })
+  .finally(() => {
 app.listen(PORT, () => {
   console.log(`🚀 API server running on http://localhost:${PORT}`);
   console.log('📊 Database:', process.env.DB_NAME);
 });
+  });
