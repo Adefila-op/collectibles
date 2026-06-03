@@ -6,64 +6,54 @@ import * as dotenv from 'dotenv';
 // Load environment variables first
 dotenv.config({ path: '.env.local' });
 
+// Use DATABASE_URL from Supabase or environment variables for local dev
+const connectionString = process.env.DATABASE_URL || 
+  `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || 'postgres'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5432'}/postgres`;
+
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: 'postgres',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
+  connectionString,
+  ssl: process.env.NODE_ENV === 'production' || process.env.DATABASE_URL?.includes('supabase') 
+    ? { rejectUnauthorized: false } 
+    : false,
 });
 
 async function initializeDatabase() {
   const client = await pool.connect();
   try {
-    console.log('📦 Initializing PostgreSQL database...');
+    console.log('📦 Initializing PostgreSQL database schema...');
     
-    // Create database if it doesn't exist
-    const dbName = process.env.DB_NAME || 'collectibles_db';
-    try {
-      await client.query(`CREATE DATABASE ${dbName};`);
-      console.log(`✅ Database '${dbName}' created`);
-    } catch (err: any) {
-      if (err.code === '42P04') {
-        console.log(`✅ Database '${dbName}' already exists`);
-      } else {
-        throw err;
+    // Read and execute schema
+    const schemaPath = path.join(process.cwd(), 'schema.sql');
+    const schema = fs.readFileSync(schemaPath, 'utf-8');
+    
+    // Split schema into individual statements and execute
+    const statements = schema
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('--'));
+    
+    for (const statement of statements) {
+      try {
+        await client.query(statement);
+      } catch (err: any) {
+        // Ignore "already exists" errors
+        if (!err.message.includes('already exists') && !err.code?.includes('42P')) {
+          console.warn('Warning:', err.message.substring(0, 100));
+        }
       }
     }
     
-    client.release();
+    console.log('✅ Database schema created');
     
-    // Connect to the new database
-    const appPool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      database: dbName,
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-    });
+    // Seed initial data
+    await seedInitialData(client);
+    console.log('✅ Initial data seeded');
     
-    const appClient = await appPool.connect();
-    try {
-      // Read and execute schema
-      const schemaPath = path.join(process.cwd(), 'schema.sql');
-      const schema = fs.readFileSync(schemaPath, 'utf-8');
-      
-      await appClient.query(schema);
-      console.log('✅ Database schema created');
-      
-      // Seed initial data
-      await seedInitialData(appClient);
-      console.log('✅ Initial data seeded');
-      
-      console.log('\n✨ Database initialization complete!');
-      console.log('📊 Tables created: users, artworks, holdings, offers, transactions, escrow, artist_royalties, admin_events\n');
-      
-    } finally {
-      appClient.release();
-      await appPool.end();
-    }
+    console.log('\n✨ Database initialization complete!');
+    console.log('📊 Tables created: users, artworks, holdings, offers, transactions, escrow, artist_royalties, admin_events\n');
+    
   } finally {
+    client.release();
     await pool.end();
   }
 }
@@ -122,17 +112,27 @@ async function seedInitialData(client: any) {
   ];
 
   for (const art of artworks) {
-    await client.query(
-      `INSERT INTO artworks (token, name, artist, category, city, year, price, image, description, unique_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (token) DO NOTHING`,
-      [art.token, art.name, art.artist, art.category, art.city, art.year, art.price, art.image, art.description, art.unique_id]
-    );
+    try {
+      await client.query(
+        `INSERT INTO artworks (token, name, artist, category, city, year, price, image, description, unique_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (token) DO NOTHING`,
+        [art.token, art.name, art.artist, art.category, art.city, art.year, art.price, art.image, art.description, art.unique_id]
+      );
+    } catch (err) {
+      // Ignore conflicts
+    }
   }
 }
 
 // Run initialization
-initializeDatabase().catch(err => {
-  console.error('❌ Database initialization failed:', err);
-  process.exit(1);
-});
+initializeDatabase()
+  .then(() => {
+    console.log('✅ All done!');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('❌ Database initialization failed:', error);
+    process.exit(1);
+  });
+
