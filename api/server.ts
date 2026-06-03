@@ -1139,6 +1139,113 @@ app.patch('/api/swap/:transactionId/reject', async (req: Request, res: Response)
   }
 });
 
+// ========== Withdrawals API ==========
+
+// Withdraw funds (no approval needed - immediate)
+app.post('/api/withdrawals', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { userId, amount, recipientAddress, artId } = req.body;
+    
+    if (!userId || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'Missing or invalid user ID or amount' });
+    }
+
+    if (!recipientAddress || !/^0x[a-fA-F0-9]{40}$/.test(recipientAddress.trim())) {
+      return res.status(400).json({ error: 'Invalid Ethereum wallet address' });
+    }
+
+    await client.query('BEGIN');
+
+    // Lock user row to prevent concurrent withdrawals
+    const userResult = await client.query(
+      'SELECT wallet_balance FROM users WHERE id = $1 FOR UPDATE',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+    let withdrawSource = 'liquid'; // 'liquid' for cash, 'art' for artwork sale
+
+    // If artId provided, they're withdrawing/selling artwork
+    if (artId) {
+      const holdingResult = await client.query(
+        `SELECT h.* FROM holdings h
+         WHERE h.art_id = $1 AND h.user_id = $2 
+         AND h.receipt_status = 'active' AND h.status IN ('owned', 'listed')`,
+        [artId, userId]
+      );
+
+      if (holdingResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'User does not own this artwork or cannot withdraw it' });
+      }
+
+      withdrawSource = 'art';
+
+      // Mark artwork as withdrawn/no longer in collection
+      await client.query(
+        `UPDATE holdings 
+         SET status = 'withdrawn', receipt_status = 'withdrawn'
+         WHERE id = $1`,
+        [holdingResult.rows[0].id]
+      );
+    } else {
+      // Liquid asset withdrawal - check balance
+      if (user.wallet_balance < amount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Insufficient wallet balance' });
+      }
+
+      // Deduct from wallet
+      await client.query(
+        'UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2',
+        [amount, userId]
+      );
+    }
+
+    // Create withdrawal transaction (completed immediately, no approval needed)
+    const txResult = await client.query(
+      `INSERT INTO transactions (type, buyer_id, amount, status, details, completed_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [
+        'withdrawal',
+        userId,
+        amount,
+        'completed',
+        JSON.stringify({
+          recipientAddress,
+          withdrawSource,
+          artId: artId || null
+        })
+      ]
+    );
+
+    const transaction = txResult.rows[0];
+
+    // Create withdrawal record (optional - for tracking)
+    // Could add a withdrawals table later if needed
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      transaction,
+      message: `Withdrawal of ${amount} initiated to ${recipientAddress}. ${withdrawSource === 'art' ? 'Artwork withdrawn from collection.' : ''}`
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Withdrawal error:', error);
+    res.status(500).json({ error: error.message || 'Failed to process withdrawal' });
+  } finally {
+    client.release();
+  }
+});
+
 // ========== Transactions API ==========
 
 // Get transaction history

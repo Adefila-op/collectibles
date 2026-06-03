@@ -148,21 +148,53 @@ export default function Profile() {
     setWalletMessage(`${depositAmount} USDC received on ${network}. Spending balance updated.`);
   }
 
-  function handleWithdraw() {
+  async function handleWithdraw() {
     if (!user || withdrawNaira <= 0) {
       setWalletMessage("Enter a withdrawal amount first.");
       return;
     }
-    if (!/^0x[a-fA-F0-9]{20,}$/.test(withdrawAddress.trim())) {
-      setWalletMessage("Enter a valid crypto wallet address.");
+    if (!/^0x[a-fA-F0-9]{40}$/.test(withdrawAddress.trim())) {
+      setWalletMessage("Enter a valid Ethereum wallet address (0x followed by 40 hex characters).");
       return;
     }
     if (withdrawNaira > balance) {
       setWalletMessage("Insufficient spending balance for this withdrawal.");
       return;
     }
-    updateWalletBalance(balance - withdrawNaira);
-    setWalletMessage(`${withdrawAmount} USDC sent on ${network}. Spending balance updated.`);
+
+    try {
+      const response = await fetch('/api/withdrawals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          amount: withdrawNaira,
+          recipientAddress: withdrawAddress.trim(),
+          artId: null, // Can add art withdrawal later
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        setWalletMessage(`Withdrawal failed: ${error.error}`);
+        return;
+      }
+
+      const data = await response.json();
+      
+      // Update local balance to reflect withdrawal
+      updateWalletBalance(balance - withdrawNaira);
+      setWalletMessage(`✓ Withdrawal processed! ${withdrawAmount} USDC sent to ${withdrawAddress.slice(0, 6)}...${withdrawAddress.slice(-4)}. You'll receive it in 2-5 minutes.`);
+      
+      // Reset form
+      setWithdrawAmount("50");
+      setWithdrawAddress("");
+      
+      // Close modal after 2 seconds
+      setTimeout(() => setWalletMode(null), 2000);
+    } catch (error: any) {
+      setWalletMessage(`Error: ${error.message}`);
+    }
   }
 
   async function handleArtistApply() {
