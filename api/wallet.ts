@@ -9,23 +9,17 @@ const RPC_ENDPOINTS = {
 };
 
 /**
- * Generate a deterministic wallet for a user based on their email
- * Same email always generates the same wallet address
- * Uses BIP39 standards for deterministic key derivation
+ * Generate a RANDOM wallet for a user (NOT deterministic)
+ * Each user gets a unique randomly generated wallet
+ * DO NOT use email-based derivation - it's a security risk
  */
 export function generateDeterministicWallet(email: string): {
   address: string;
   publicKey: string;
 } {
   try {
-    // Create a deterministic seed from email (always produces 32 bytes)
-    const hash = crypto.createHash('sha256').update(email).digest();
-    
-    // Convert to hex string and ensure it's prefixed with 0x
-    const privateKeyHex = '0x' + hash.toString('hex');
-    
-    // Create a wallet from the private key
-    const wallet = new ethers.Wallet(privateKeyHex);
+    // Generate a random wallet instead of deterministic
+    const wallet = ethers.Wallet.createRandom();
     
     return {
       address: wallet.address,

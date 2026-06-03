@@ -60,17 +60,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       try {
-        const users = await userAPI.getAll();
-        const user = users.find((u: User) => u.email === email);
+        // Use server-side login endpoint for secure password verification
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
         
-        if (!user) {
-          return { ok: false, error: "User not found" };
+        if (!response.ok) {
+          const error = await response.json();
+          return { ok: false, error: error.error || 'Login failed' };
         }
         
-        if (user.password !== password) {
-          return { ok: false, error: "Invalid password" };
-        }
-        
+        const user = await response.json();
         localStorage.setItem("artchain_session", JSON.stringify({ user }));
         setUser(user);
         return { ok: true };

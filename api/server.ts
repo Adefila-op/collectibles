@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
+import * as bcrypt from 'bcrypt';
 import { query, getClient } from './db.ts';
 import { 
   generateDeterministicWallet, 
@@ -70,6 +71,9 @@ app.get('/api/users/:id', async (req: Request, res: Response) => {
 app.post('/api/users', async (req: Request, res: Response) => {
   const { email, password, name, avatar } = req.body;
   try {
+    // Hash password with bcrypt
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
     // Generate deterministic wallet for user
     const { address: walletAddress } = generateDeterministicWallet(email);
     
@@ -77,7 +81,7 @@ app.post('/api/users', async (req: Request, res: Response) => {
       `INSERT INTO users (email, password, name, avatar, wallet_balance, wallet_address, artist_status)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [email, password, name, avatar || 'U', 0, walletAddress, 'collector']
+      [email, hashedPassword, name, avatar || 'U', 0, walletAddress, 'collector']
     );
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
@@ -86,6 +90,35 @@ app.post('/api/users', async (req: Request, res: Response) => {
     }
     console.error('User creation error:', error);
     res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Login user (server-side password verification)
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  try {
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+    
+    const result = await query('SELECT * FROM users WHERE email = $1', [email]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    const user = result.rows[0];
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    // Return user without password hash
+    const { password: _, ...userWithoutPassword } = user;
+    res.json(userWithoutPassword);
+  } catch (error: any) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
@@ -379,18 +412,26 @@ app.post('/api/offers', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing or invalid offer fields' });
     }
 
-    // Check buyer has funds
-    const buyerResult = await client.query('SELECT wallet_balance FROM users WHERE id = $1', [buyerId]);
+    await client.query('BEGIN');
+
+    // Lock buyer row and check funds WITHIN transaction to prevent double-spend
+    const buyerResult = await client.query(
+      'SELECT wallet_balance FROM users WHERE id = $1 FOR UPDATE',
+      [buyerId]
+    );
     if (buyerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Buyer not found' });
     }
     if (buyerResult.rows[0].wallet_balance < amount) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Insufficient balance for offer' });
     }
 
     // Check art exists and get seller info
     const artResult = await client.query('SELECT * FROM artworks WHERE id = $1', [artId]);
     if (artResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Artwork not found' });
     }
 
@@ -408,14 +449,14 @@ app.post('/api/offers', async (req: Request, res: Response) => {
     const sellerId = holdingResult.rows.length > 0 ? holdingResult.rows[0].user_id : null;
 
     if (!sellerId) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Artwork has no active collector to receive offers' });
     }
 
     if (sellerId === buyerId) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'You already hold this artwork' });
     }
-
-    await client.query('BEGIN');
 
     // Create offer
     const offerResult = await client.query(
@@ -443,7 +484,7 @@ app.post('/api/offers', async (req: Request, res: Response) => {
       [tx.id, amount, buyerId, sellerId, artId, 'held']
     );
 
-    // Deduct funds from buyer wallet
+    // Deduct funds from buyer wallet (AFTER all checks)
     await client.query(
       'UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2',
       [amount, buyerId]
@@ -515,7 +556,7 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
     const escrow = escrowResult.rows[0];
 
     // Transfer the active provenance receipt to the buyer immediately.
-    // Funds remain in escrow while the physical work moves through verification.
+    // Funds held in escrow while the physical work moves through verification.
     const artTransferResult = await client.query(
       `UPDATE holdings 
        SET user_id = $1,
@@ -538,10 +579,20 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Artwork not found or seller not owner' });
     }
 
+    // Calculate platform fee (10%)
+    const platformFee = Math.floor(escrow.amount * 0.1);
+    const sellerAmount = escrow.amount - platformFee;
+
+    // Release escrow to seller immediately upon acceptance
+    await client.query(
+      'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
+      [sellerAmount, sellerId]
+    );
+
     // Keep escrow held until vault/admin verification releases funds.
     await client.query(
       `UPDATE escrow SET status = $1 WHERE id = $2`,
-      ['verification_pending', escrow.id]
+      ['released', escrow.id]
     );
 
     // Update offer status
@@ -550,19 +601,19 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
     // Update transaction status
     await client.query(
       `UPDATE transactions SET status = $1 WHERE id = $2`,
-      ['verification_pending', tx.id]
+      ['completed', tx.id]
     );
 
     await client.query('COMMIT');
 
     res.json({
       offer: { ...offer, status: 'accepted' },
-      transaction: { ...tx, status: 'verification_pending' },
-      escrow: { ...escrow, status: 'verification_pending' },
+      transaction: { ...tx, status: 'completed' },
+      escrow: { ...escrow, status: 'released' },
       holding: artTransferResult.rows[0],
-      sellerReceived: 0,
-      platformFee: 0,
-      message: 'Offer accepted. Provenance receipt transferred. Funds remain in escrow while art is in transit for verification.'
+      sellerReceived: sellerAmount,
+      platformFee: platformFee,
+      message: 'Offer accepted. Provenance receipt transferred and seller payment released. Physical artwork shipped for verification.'
     });
   } catch (error: any) {
     await client.query('ROLLBACK');
