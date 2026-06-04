@@ -65,8 +65,7 @@ export default function Admin() {
 
   async function approveArtwork(submissionId: string) {
     try {
-      const adminUserId = localStorage.getItem("artchain_user_id") || "admin";
-      await submissionAPI.approve(submissionId, adminUserId, "Artwork verified and authenticated");
+      await submissionAPI.approve(submissionId);
       const updatedSubmissions = await submissionAPI.getAll();
       setSubmissions(updatedSubmissions);
       setMessage("Artwork approved! Certificate NFT minted on Base testnet.");
@@ -77,8 +76,7 @@ export default function Admin() {
 
   async function rejectArtwork(submissionId: string) {
     try {
-      const adminUserId = localStorage.getItem("artchain_user_id") || "admin";
-      await submissionAPI.reject(submissionId, adminUserId, "Proof not sufficient");
+      await submissionAPI.reject(submissionId);
       const updatedSubmissions = await submissionAPI.getAll();
       setSubmissions(updatedSubmissions);
       setMessage("Artwork submission rejected.");

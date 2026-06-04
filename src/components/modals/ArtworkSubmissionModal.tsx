@@ -36,13 +36,15 @@ export function ArtworkSubmissionModal({
       setIsSubmitting(true);
       setMessage("");
 
-      await submissionAPI.submit(
-        artistId,
-        artworkId,
-        proofImageUrl,
-        proofDocumentUrl,
-        description
-      );
+      await submissionAPI.submit({
+        artist_id: artistId,
+        art_id: artworkId,
+        proof_image_url: proofImageUrl,
+        proof_document_url: proofDocumentUrl,
+        description: description,
+        submission_status: 'pending',
+        created_at: new Date().toISOString(),
+      });
 
       setMessage("Artwork submitted for verification! Admin will review within 24-48 hours.");
       setStep(2);

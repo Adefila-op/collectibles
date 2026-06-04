@@ -1,4 +1,10 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Add property aliases for backward compatibility
 function addUserAliases(user: any): any {
@@ -128,277 +134,289 @@ export interface Certificate {
   created_at: string;
 }
 
-// Helper function for API calls
-async function apiCall(endpoint: string, options: RequestInit = {}) {
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'API error' }));
-    throw new Error(error.error || `API error: ${response.status}`);
-  }
-
-  return response.json();
-}
-
 // User API
 export const userAPI = {
   getAll: async () => {
-    const users = await apiCall('/api/users');
-    return users.map(addUserAliases);
+    const { data, error } = await supabase.from('users').select('*');
+    if (error) throw error;
+    return (data || []).map(addUserAliases);
   },
   getById: async (id: string) => {
-    const user = await apiCall(`/api/users/${id}`);
-    return addUserAliases(user);
+    const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
+    if (error) throw error;
+    return addUserAliases(data);
   },
   create: async (user: Partial<User> & { password: string }) => {
-    const newUser = await apiCall('/api/users', { method: 'POST', body: JSON.stringify(user) });
-    return addUserAliases(newUser);
+    // Sign up user with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: user.email || '',
+      password: user.password,
+    });
+    if (authError) throw authError;
+
+    // Create user profile in database
+    const { data, error } = await supabase.from('users').insert({
+      id: authData.user?.id,
+      email: user.email,
+      name: user.name,
+      avatar: user.avatar,
+      wallet_balance: 0,
+      artist_status: 'collector',
+    }).select().single();
+    if (error) throw error;
+    return addUserAliases(data);
   },
   updateWallet: async (userId: string, amount: number) => {
-    const user = await apiCall(`/api/users/${userId}/wallet`, { 
-      method: 'PATCH', 
-      body: JSON.stringify({ amount }) 
-    });
-    return addUserAliases(user);
+    const { data, error } = await supabase
+      .from('users')
+      .update({ wallet_balance: amount })
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return addUserAliases(data);
   },
   updateArtistStatus: async (userId: string, data: any) => {
-    const user = await apiCall(`/api/users/${userId}/artist-status`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-    return addUserAliases(user);
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update({
+        artist_status: data.artist_status,
+        artist_type: data.artist_type,
+        artist_bio: data.artist_bio,
+        portfolio_url: data.portfolio_url,
+        social_url: data.social_url,
+        live_location: data.live_location,
+        call_url: data.call_url,
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return addUserAliases(updatedUser);
   },
 };
 
 // Artwork API
 export const artAPI = {
   getAll: async () => {
-    const artworks = await apiCall('/api/artworks');
-    return artworks.map(addArtAliases);
+    const { data, error } = await supabase.from('artworks').select('*');
+    if (error) throw error;
+    return (data || []).map(addArtAliases);
   },
   getById: async (id: string) => {
-    const artwork = await apiCall(`/api/artworks/${id}`);
-    return addArtAliases(artwork);
+    const { data, error } = await supabase.from('artworks').select('*').eq('id', id).single();
+    if (error) throw error;
+    return addArtAliases(data);
   },
-  create: async (data: any) => {
-    const result = await apiCall('/api/artworks', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    return {
-      ...result,
-      artwork: addArtAliases(result.artwork),
-    };
+  create: async (artwork: any) => {
+    const { data, error } = await supabase
+      .from('artworks')
+      .insert(artwork)
+      .select()
+      .single();
+    if (error) throw error;
+    return addArtAliases(data);
   },
 };
 
 // Holdings API
 export const holdingsAPI = {
   getByUserId: async (userId: string) => {
-    const holdings = await apiCall(`/api/holdings/${userId}`);
-    return holdings.map(addArtAliases);
+    const { data, error } = await supabase
+      .from('holdings')
+      .select('*')
+      .eq('user_id', userId);
+    if (error) throw error;
+    return (data || []).map(addArtAliases);
   },
-  create: (userId: string, artId: string, status: string = 'owned') =>
-    apiCall('/api/holdings', {
-      method: 'POST',
-      body: JSON.stringify({ userId, artId, status }),
-    }),
-  update: (holdingId: string, userId: string, data: { status: string; listedPrice?: number }) =>
-    apiCall(`/api/holdings/${holdingId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ userId, ...data }),
-    }),
+  getByUser: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('holdings')
+      .select('*')
+      .eq('user_id', userId);
+    if (error) throw error;
+    return (data || []).map(addArtAliases);
+  },
+  create: async (holding: any) => {
+    const { data, error } = await supabase
+      .from('holdings')
+      .insert(holding)
+      .select()
+      .single();
+    if (error) throw error;
+    return addArtAliases(data);
+  },
+  update: async (holdingId: string, userId: string, updateData: any) => {
+    const { data, error } = await supabase
+      .from('holdings')
+      .update(updateData)
+      .eq('id', holdingId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return addArtAliases(data);
+  },
 };
 
 // Offers API
 export const offersAPI = {
-  getAll: () => apiCall('/api/offers'),
-  getByArtId: (artId: string) => apiCall(`/api/offers/art/${artId}`),
-  create: (buyerId: string, artId: string, amount: number) =>
-    apiCall('/api/offers', {
-      method: 'POST',
-      body: JSON.stringify({ buyerId, artId, amount }),
-    }),
-  accept: (offerId: string, sellerId: string) =>
-    apiCall(`/api/offers/${offerId}/accept`, {
-      method: 'PATCH',
-      body: JSON.stringify({ sellerId }),
-    }),
-  reject: (offerId: string) =>
-    apiCall(`/api/offers/${offerId}/reject`, {
-      method: 'PATCH',
-    }),
-};
-
-// Direct Purchase API
-export const purchaseAPI = {
-  buy: (buyerId: string, artId: string, amount: number, sellerId: string) =>
-    apiCall('/api/buy', {
-      method: 'POST',
-      body: JSON.stringify({ buyerId, artId, amount, sellerId }),
-    }),
+  getAll: async () => {
+    const { data, error } = await supabase.from('offers').select('*');
+    if (error) throw error;
+    return data || [];
+  },
+  getByArtId: async (artId: string) => {
+    const { data, error } = await supabase
+      .from('offers')
+      .select('*')
+      .eq('art_id', artId);
+    if (error) throw error;
+    return data || [];
+  },
+  create: async (buyerId: string, artId: string, amount: number) => {
+    const { data, error } = await supabase
+      .from('offers')
+      .insert({ buyer_id: buyerId, art_id: artId, amount, status: 'pending' })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  accept: async (offerId: string, sellerId: string) => {
+    const { data, error } = await supabase
+      .from('offers')
+      .update({ status: 'accepted' })
+      .eq('id', offerId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  reject: async (offerId: string) => {
+    const { data, error } = await supabase
+      .from('offers')
+      .update({ status: 'rejected' })
+      .eq('id', offerId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
 };
 
 // Swap API
 export const swapAPI = {
-  propose: (userId1: string, userId2: string, artId1: string, artId2: string, cashAmount: number = 0) =>
-    apiCall('/api/swap', {
-      method: 'POST',
-      body: JSON.stringify({ userId1, userId2, artId1, artId2, cashAmount }),
-    }),
-  accept: (transactionId: string) =>
-    apiCall(`/api/swap/${transactionId}/accept`, {
-      method: 'PATCH',
-    }),
-  reject: (transactionId: string) =>
-    apiCall(`/api/swap/${transactionId}/reject`, {
-      method: 'PATCH',
-    }),
+  propose: async (userId1: string, userId2: string, artId1: string, artId2: string, cashAmount: number = 0) => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert({
+        type: 'swap',
+        from_user_id: userId1,
+        to_user_id: userId2,
+        art_id: artId1,
+        status: 'pending',
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  accept: async (transactionId: string) => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .update({ status: 'completed' })
+      .eq('id', transactionId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  reject: async (transactionId: string) => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .update({ status: 'rejected' })
+      .eq('id', transactionId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
 };
 
 // Transactions API
 export const transactionsAPI = {
-  getAll: (limit: number = 50) => apiCall(`/api/transactions?limit=${limit}`),
-  getByUserId: (userId: string) => apiCall(`/api/transactions/${userId}`),
-  create: (data: any) =>
-    apiCall('/api/transactions', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  complete: (transactionId: string) =>
-    apiCall(`/api/transactions/${transactionId}/complete`, {
-      method: 'PATCH',
-    }),
-};
-
-// Escrow API
-export const escrowAPI = {
-  getByTransactionId: (transactionId: string) =>
-    apiCall(`/api/escrow/${transactionId}`),
-  create: (data: any) =>
-    apiCall('/api/escrow', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  release: (escrowId: string) =>
-    apiCall(`/api/escrow/${escrowId}/release`, {
-      method: 'PATCH',
-    }),
-};
-
-// Admin API
-export const adminAPI = {
-  getEvents: (limit: number = 50) => apiCall(`/api/admin/events?limit=${limit}`),
-  logEvent: (data: any) =>
-    apiCall('/api/admin/events', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-};
-
-// Wallet API
-export const walletAPI = {
-  /**
-   * Get wallet balance for a specific chain
-   */
-  getBalance: async (address: string, chain: 'base' | 'ethereum' | 'polygon' = 'base') => {
-    return apiCall(`/api/wallet/${address}/balance/${chain}`);
+  getAll: async (limit: number = 50) => {
+    const { data, error } = await supabase.from('transactions').select('*').limit(limit);
+    if (error) throw error;
+    return data || [];
   },
-
-  /**
-   * Get wallet balance from all supported chains
-   */
-  getBalanceAllChains: async (address: string) => {
-    return apiCall(`/api/wallet/${address}/balance`);
-  },
-
-  /**
-   * Get estimated gas fee for a transaction
-   */
-  getGasFee: async (chain: 'base' | 'ethereum' | 'polygon' = 'base') => {
-    return apiCall(`/api/wallet/gas-fee/${chain}`);
-  },
-
-  /**
-   * Create a top-up deposit request
-   */
-  createTopup: async (userId: string, amount: number, chain: string = 'base', paymentMethod: string = 'stripe') => {
-    return apiCall('/api/wallet/topup', {
-      method: 'POST',
-      body: JSON.stringify({ userId, amount, chain, paymentMethod }),
-    });
-  },
-
-  /**
-   * Confirm a top-up after payment
-   */
-  confirmTopup: async (transactionId: string) => {
-    return apiCall(`/api/wallet/topup/${transactionId}/confirm`, {
-      method: 'PATCH',
-    });
-  },
-
-  /**
-   * Get user's top-up history
-   */
-  getTopupHistory: async (userId: string) => {
-    return apiCall(`/api/wallet/topups/${userId}`);
-  },
-
-  /**
-   * Sync wallet balance with blockchain
-   */
-  syncBalance: async (userId: string, chain: string = 'base') => {
-    return apiCall(`/api/wallet/sync/${userId}`, {
-      method: 'POST',
-      body: JSON.stringify({ chain }),
-    });
+  getByUserId: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`);
+    if (error) throw error;
+    return data || [];
   },
 };
 
-// Artwork Submission API (verification workflow)
+// Purchase API
+export const purchaseAPI = {
+  buy: async (buyerId: string, artId: string, amount: number, sellerId: string) => {
+    // Create a transaction record for the purchase
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert({
+        type: 'purchase',
+        buyer_id: buyerId,
+        seller_id: sellerId,
+        amount: amount,
+        art_id: artId,
+        status: 'pending',
+        details: { purchased: true },
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+};
+
+// Submission API
 export const submissionAPI = {
-  submit: async (artistId: string, artId: string, proofImageUrl?: string, proofDocumentUrl?: string, description?: string) => {
-    return apiCall('/api/artwork-submissions', {
-      method: 'POST',
-      body: JSON.stringify({
-        artistId,
-        artId,
-        proofImageUrl,
-        proofDocumentUrl,
-        description,
-      }),
-    });
+  submit: async (submission: any) => {
+    const { data, error } = await supabase
+      .from('artwork_submissions')
+      .insert(submission)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   },
-  
   getAll: async () => {
-    return apiCall('/api/artwork-submissions');
+    const { data, error } = await supabase.from('artwork_submissions').select('*');
+    if (error) throw error;
+    return data || [];
   },
-  
-  getByArtwork: async (artId: string) => {
-    return apiCall(`/api/artwork-submissions/art/${artId}`);
+  approve: async (submissionId: string) => {
+    const { data, error } = await supabase
+      .from('artwork_submissions')
+      .update({ submission_status: 'approved' })
+      .eq('id', submissionId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   },
-  
-  approve: async (submissionId: string, adminId: string, adminNotes?: string) => {
-    return apiCall(`/api/artwork-submissions/${submissionId}/approve`, {
-      method: 'PATCH',
-      body: JSON.stringify({ adminId, adminNotes }),
-    });
-  },
-  
-  reject: async (submissionId: string, adminId: string, adminNotes?: string) => {
-    return apiCall(`/api/artwork-submissions/${submissionId}/reject`, {
-      method: 'PATCH',
-      body: JSON.stringify({ adminId, adminNotes }),
-    });
+  reject: async (submissionId: string) => {
+    const { data, error } = await supabase
+      .from('artwork_submissions')
+      .update({ submission_status: 'rejected' })
+      .eq('id', submissionId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   },
 };
-
-// Health check
-export const healthCheck = () => apiCall('/api/health');
