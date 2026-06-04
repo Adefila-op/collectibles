@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { fmt } from "@/lib/art-data";
 import { artAPI, type Art } from "@/lib/api";
+import { holdingsAPI } from "@/lib/api-transactions";
 import { OFFERS } from "@/lib/offers-data";
 import { ARTWORKS } from "@/lib/art-data";
 import {
@@ -40,7 +41,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings, initializeDemoHoldingsIfNeeded, type UserHolding } from "@/lib/db";
+import { type UserHolding } from "@/lib/db";
 import { BuyArtModal } from "@/components/modals/BuyArtModal";
 import { BuyArtModalDesktop } from "@/components/modals/BuyArtModalDesktop";
 import { OfferModal } from "@/components/modals/OfferModal";
@@ -95,9 +96,9 @@ export default function Explore() {
   >(null);
   const [holdingsVersion, setHoldingsVersion] = useState(0);
   const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
   const [isLoadingArtworks, setIsLoadingArtworks] = useState(true);
 
-  const userHoldings = user ? getHoldings(user.id) : [];
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
 
   // Fetch artworks from API
@@ -116,11 +117,26 @@ export default function Explore() {
     fetchArtworks();
   }, []);
 
-  // Initialize demo holdings when viewing portfolio for the first time
+  // Fetch user holdings from API
   useEffect(() => {
-    if (user && activeSection === "portfolio") {
-      initializeDemoHoldingsIfNeeded(user.id);
-      setHoldingsVersion((v) => v + 1);
+    const fetchHoldings = async () => {
+      if (user?.id) {
+        try {
+          const holdings = await holdingsAPI.getByUser(user.id);
+          setUserHoldings(holdings);
+        } catch (error) {
+          console.error("Error fetching holdings:", error);
+        }
+      }
+    };
+    fetchHoldings();
+  }, [user?.id, holdingsVersion]);
+
+  // Refresh holdings when portfolio section is accessed
+  useEffect(() => {
+    if (user?.id && activeSection === "portfolio") {
+      // Re-fetch holdings to ensure fresh data
+      holdingsAPI.getByUser(user.id).then(setUserHoldings).catch(console.error);
     }
   }, [user, activeSection]);
 

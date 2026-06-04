@@ -5,7 +5,8 @@ import { useState, useEffect } from "react";
 import { topOfferForCategory } from "@/lib/offers-data";
 import { fmt, getArt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { addHolding, updateHoldingStatus, addArtwork, fileToBase64, getHoldings } from "@/lib/db";
+import { artAPI } from "@/lib/api";
+import { holdingsAPI } from "@/lib/api-transactions";
 
 interface ListingForm {
   title: string;
@@ -149,9 +150,14 @@ export default function ListArt() {
     const files = event.target.files;
     if (files && files.length > 0) {
       try {
-        const base64 = await fileToBase64(files[0]);
-        setImageData(base64);
-        alert("Image uploaded successfully!");
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            setImageData(e.target.result as string);
+            alert("Image uploaded successfully!");
+          }
+        };
+        reader.readAsDataURL(files[0]);
       } catch (error) {
         console.error("Error uploading image:", error);
         alert("Error uploading image. Please try again.");
@@ -211,32 +217,28 @@ export default function ListArt() {
         }
       }
       
-      // Create artwork metadata
-      const artwork = addArtwork(
-        form.title,
-        user.name,
-        city,
-        yearNum,
-        form.category,
-        priceNum,
-        imageData,
-        user.id,
-        form.collectionType,
-        form.collectionType === "Larger collection" ? `${form.supply} supply` : "1"
-      );
-      
-      // Create a new holding with the same ID as artwork
-      const holding = addHolding(user.id, artwork.id, "listed");
-      
-      // Update holding with price
-      updateHoldingStatus(holding.id, "listed", priceNum);
+      // Call API to create artwork + holding
+      const response = await artAPI.create({
+        userId: user.id,
+        name: form.title,
+        artist: user.name,
+        category: form.category,
+        city: city,
+        year: yearNum,
+        price: priceNum,
+        image: imageData,
+        description: form.collectionType === "Larger collection" ? `${form.supply} supply` : "1",
+        collectionType: form.collectionType,
+        supplyName: form.collectionType === "Larger collection" ? form.supply : "1",
+        listImmediately: true,
+      });
       
       // Show success message
       alert("Artwork published successfully!");
       navigate("/profile");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error publishing artwork:", error);
-      alert("Error publishing artwork. Please try again.");
+      alert(error.message || "Error publishing artwork. Please try again.");
     }
   };
 

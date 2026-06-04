@@ -1,7 +1,7 @@
 import { OFFERS, type Offer } from "@/lib/offers-data";
 import { ARTWORKS, getAllArtworks, fmt, type Art } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings, proposeSwap } from "@/lib/db";
+import { holdingsAPI, swapsAPI } from "@/lib/api-transactions";
 import {
   ArrowDownUp,
   ShieldCheck,
@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Loader2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,15 +25,34 @@ interface SwapModalProps {
 
 export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
   const { user } = useAuth();
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
   const allArtworks = getAllArtworks();
-  const ownedHolding = user ? getHoldings(user.id).find((holding) => holding.status === "owned") : null;
+
+  // Fetch user holdings on component mount
+  useEffect(() => {
+    const fetchHoldings = async () => {
+      if (user?.id) {
+        try {
+          const holdings = await holdingsAPI.getByUser(user.id);
+          setUserHoldings(holdings);
+        } catch (error) {
+          console.error("Error fetching holdings:", error);
+        }
+      }
+    };
+    if (open) {
+      fetchHoldings();
+    }
+  }, [user?.id, open]);
+
+  const ownedHolding = user ? userHoldings.find((holding) => holding.status === "owned") : null;
   const [myArt] = useState<Art>(
     ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0]
   );
   const [message, setMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  function acceptStandingOffer(offer: Offer) {
+  async function acceptStandingOffer(offer: Offer) {
     if (!user || !ownedHolding) {
       setMessage("Sign in with an owned artwork before accepting a swap offer.");
       return;
@@ -42,8 +61,14 @@ export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
     if (isProcessing) return;
     setIsProcessing(true);
 
-    setTimeout(() => {
-      proposeSwap(user.id, `standing-${offer.id}`, myArt.id, offer.offeredArt?.id || offer.id);
+    try {
+      // Call API to propose swap
+      await swapsAPI.proposeSwap({
+        initiatorUserId: user.id,
+        initiatorHoldingId: ownedHolding.id,
+        targetHoldingId: offer.offeredArt?.id || offer.id,
+      });
+      
       setMessage(`Swap accepted! You'll receive ${fmt(offer.cash)}.`);
       
       setTimeout(() => {
@@ -51,7 +76,11 @@ export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
         setMessage("");
         setIsProcessing(false);
       }, 1500);
-    }, 500);
+    } catch (error) {
+      setMessage("Error proposing swap. Please try again.");
+      setIsProcessing(false);
+      console.error("Error proposing swap:", error);
+    }
   }
 
   const matching = useMemo(

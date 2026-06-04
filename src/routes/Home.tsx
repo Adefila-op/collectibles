@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import { getAllArtworks, fmt } from "@/lib/art-data";
+import { holdingsAPI } from "@/lib/api-transactions";
 import {
   Repeat2,
   Search,
@@ -10,14 +11,28 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings } from "@/lib/db";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const { user } = useAuth();
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
   const greeting = user ? user.name.split(" ")[0] : "Collector";
   const initials = user ? user.avatar : "?";
 
-  const userHoldings = user ? getHoldings(user.id) : [];
+  useEffect(() => {
+    const fetchHoldings = async () => {
+      if (user?.id) {
+        try {
+          const holdings = await holdingsAPI.getByUser(user.id);
+          setUserHoldings(holdings);
+        } catch (error) {
+          console.error("Error fetching holdings:", error);
+        }
+      }
+    };
+    fetchHoldings();
+  }, [user?.id]);
+
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
   const allArtworks = getAllArtworks();
 

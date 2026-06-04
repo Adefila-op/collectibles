@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import { fmt } from "@/lib/art-data";
 import { artAPI } from "@/lib/api";
+import { holdingsAPI } from "@/lib/api-transactions";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings } from "@/lib/db";
 import { ShoppingCart } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -22,29 +22,34 @@ interface BuyArtModalProps {
 export function BuyArtModal({ open, onOpenChange }: BuyArtModalProps) {
   const { user } = useAuth();
   const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchArtworks = async () => {
+    const fetchData = async () => {
       try {
         const artworks = await artAPI.getAll();
         setAllArtworks(artworks);
+        
+        if (user?.id) {
+          const holdings = await holdingsAPI.getByUser(user.id);
+          setUserHoldings(holdings);
+        }
       } catch (err) {
-        console.error("Failed to fetch artworks:", err);
+        console.error("Failed to fetch data:", err);
       }
     };
     if (open) {
-      fetchArtworks();
+      fetchData();
     }
-  }, [open]);
+  }, [open, user?.id]);
 
-  const allHoldings = getHoldings();
   const userHeldArtIds = new Set(
-    user ? allHoldings.filter((h) => h.userId === user.id && h.status !== "swapped").map((h) => h.artId) : []
+    userHoldings.filter((h) => h.status !== "swapped").map((h) => h.artId)
   );
 
   const availableForPurchase = allArtworks.filter((art) => {
     if (userHeldArtIds.has(art.id)) return false;
-    const activeHolding = allHoldings.find((h) => h.artId === art.id && h.status !== "swapped");
+    const activeHolding = userHoldings.find((h) => h.artId === art.id && h.status !== "swapped");
     return !activeHolding || activeHolding.status === "listed";
   });
 

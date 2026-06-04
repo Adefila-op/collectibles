@@ -93,6 +93,41 @@ export interface Transaction {
   completed_at?: string;
 }
 
+export interface ArtworkSubmission {
+  id: string;
+  artist_id: string;
+  art_id: string;
+  proof_image_url?: string;
+  proof_document_url?: string;
+  description?: string;
+  submission_status: 'submitted' | 'approved' | 'rejected';
+  admin_notes?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  nft_transaction_hash?: string;
+  nft_token_id?: string;
+  created_at: string;
+  updated_at: string;
+  artist_name?: string;
+  artist_email?: string;
+  artwork_name?: string;
+  artwork_image?: string;
+}
+
+export interface Certificate {
+  id: string;
+  holding_id: string;
+  art_id: string;
+  buyer_id: string;
+  artist_id: string;
+  certificate_number: string;
+  issued_at: string;
+  authenticity_verified: boolean;
+  verification_method?: string;
+  details?: any;
+  created_at: string;
+}
+
 // Helper function for API calls
 async function apiCall(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`${API_URL}${endpoint}`, {
@@ -323,6 +358,44 @@ export const walletAPI = {
     return apiCall(`/api/wallet/sync/${userId}`, {
       method: 'POST',
       body: JSON.stringify({ chain }),
+    });
+  },
+};
+
+// Artwork Submission API (verification workflow)
+export const submissionAPI = {
+  submit: async (artistId: string, artId: string, proofImageUrl?: string, proofDocumentUrl?: string, description?: string) => {
+    return apiCall('/api/artwork-submissions', {
+      method: 'POST',
+      body: JSON.stringify({
+        artistId,
+        artId,
+        proofImageUrl,
+        proofDocumentUrl,
+        description,
+      }),
+    });
+  },
+  
+  getAll: async () => {
+    return apiCall('/api/artwork-submissions');
+  },
+  
+  getByArtwork: async (artId: string) => {
+    return apiCall(`/api/artwork-submissions/art/${artId}`);
+  },
+  
+  approve: async (submissionId: string, adminId: string, adminNotes?: string) => {
+    return apiCall(`/api/artwork-submissions/${submissionId}/approve`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminId, adminNotes }),
+    });
+  },
+  
+  reject: async (submissionId: string, adminId: string, adminNotes?: string) => {
+    return apiCall(`/api/artwork-submissions/${submissionId}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminId, adminNotes }),
     });
   },
 };

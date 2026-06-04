@@ -1,20 +1,48 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AppFrame } from "@/components/AppFrame";
-import { getUsers, updateArtistStatus, type User } from "@/lib/db";
+import { userAPI, submissionAPI } from "@/lib/api";
 import { Check, ExternalLink, ShieldCheck, X } from "lucide-react";
+import type { User, ArtworkSubmission } from "@/lib/api";
 
 const ADMIN_CODE = "COLLECTIBLE-ADMIN";
 
 export default function Admin() {
   const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem("artchain_admin") === "true");
   const [code, setCode] = useState("");
-  const [users, setUsers] = useState<User[]>(() => getUsers());
+  const [users, setUsers] = useState<User[]>([]);
+  const [submissions, setSubmissions] = useState<ArtworkSubmission[]>([]);
   const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"artists" | "artworks">("artists");
+
+  // Fetch data on component mount or when unlocked
+  useEffect(() => {
+    const fetchData = async () => {
+      if (isUnlocked) {
+        try {
+          setIsLoading(true);
+          const [fetchedUsers, fetchedSubmissions] = await Promise.all([
+            userAPI.getAll(),
+            submissionAPI.getAll().catch(() => [])
+          ]);
+          setUsers(fetchedUsers);
+          setSubmissions(fetchedSubmissions);
+        } catch (error) {
+          console.error("Error fetching data:", error);
+          setMessage("Error loading data");
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    fetchData();
+  }, [isUnlocked]);
 
   const pending = useMemo(() => users.filter((user) => user.artistStatus === "pending"), [users]);
   const approved = useMemo(() => users.filter((user) => user.artistStatus === "approved"), [users]);
+  const pendingSubmissions = useMemo(() => submissions.filter((s) => s.submission_status === "submitted"), [submissions]);
 
-  function unlock() {
+  async function unlock() {
     if (code.trim() !== ADMIN_CODE) {
       setMessage("Invalid admin code.");
       return;
@@ -24,14 +52,39 @@ export default function Admin() {
     setMessage("");
   }
 
-  function decide(userId: string, status: "collector" | "approved") {
-    const result = updateArtistStatus(userId, status);
-    if (!result.ok) {
-      setMessage(result.error);
-      return;
+  async function decide(userId: string, status: "collector" | "approved") {
+    try {
+      await userAPI.updateArtistStatus(userId, status === "approved" ? "approved" : "collector");
+      const updatedUsers = await userAPI.getAll();
+      setUsers(updatedUsers);
+      setMessage(status === "approved" ? "Artist approved. Upload access is now unlocked." : "Application rejected. User remains a collector.");
+    } catch (error: any) {
+      setMessage(error.message || "Error updating artist status");
     }
-    setUsers(getUsers());
-    setMessage(status === "approved" ? "Artist approved. Upload access is now unlocked." : "Application rejected. User remains a collector.");
+  }
+
+  async function approveArtwork(submissionId: string) {
+    try {
+      const adminUserId = localStorage.getItem("artchain_user_id") || "admin";
+      await submissionAPI.approve(submissionId, adminUserId, "Artwork verified and authenticated");
+      const updatedSubmissions = await submissionAPI.getAll();
+      setSubmissions(updatedSubmissions);
+      setMessage("Artwork approved! Certificate NFT minted on Base testnet.");
+    } catch (error: any) {
+      setMessage(error.message || "Error approving artwork");
+    }
+  }
+
+  async function rejectArtwork(submissionId: string) {
+    try {
+      const adminUserId = localStorage.getItem("artchain_user_id") || "admin";
+      await submissionAPI.reject(submissionId, adminUserId, "Proof not sufficient");
+      const updatedSubmissions = await submissionAPI.getAll();
+      setSubmissions(updatedSubmissions);
+      setMessage("Artwork submission rejected.");
+    } catch (error: any) {
+      setMessage(error.message || "Error rejecting artwork");
+    }
   }
 
   if (!isUnlocked) {
@@ -44,7 +97,7 @@ export default function Admin() {
             </div>
             <h1 className="mt-4 text-center font-display text-xl font-semibold">Admin review</h1>
             <p className="mt-2 text-center text-sm text-muted-foreground">
-              Enter the admin code to review artist applications.
+              Enter the admin code to review artist applications and artwork verifications.
             </p>
             <input
               value={code}
@@ -69,80 +122,173 @@ export default function Admin() {
     <AppFrame label="Admin">
       <div className="space-y-5 px-5 pt-4 pb-6">
         <div>
-          <h1 className="font-display text-xl font-semibold">Artist approvals</h1>
-          <p className="text-xs text-muted-foreground">Review pending artists before they can upload artwork.</p>
+          <h1 className="font-display text-xl font-semibold">Admin Panel</h1>
+          <p className="text-xs text-muted-foreground">Manage artist approvals and artwork verification.</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-card p-3 shadow-card">
-            <div className="text-[10px] text-muted-foreground">Pending</div>
-            <div className="font-display text-xl font-semibold">{pending.length}</div>
-          </div>
-          <div className="rounded-2xl bg-card p-3 shadow-card">
-            <div className="text-[10px] text-muted-foreground">Approved</div>
-            <div className="font-display text-xl font-semibold">{approved.length}</div>
-          </div>
+        {/* Tab Navigation */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab("artists")}
+            className={`flex-1 rounded-2xl px-3 py-2 text-xs font-semibold transition-colors ${
+              activeTab === "artists"
+                ? "bg-primary text-white"
+                : "bg-muted text-foreground hover:bg-muted/80"
+            }`}
+          >
+            Artists ({pending.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("artworks")}
+            className={`flex-1 rounded-2xl px-3 py-2 text-xs font-semibold transition-colors ${
+              activeTab === "artworks"
+                ? "bg-primary text-white"
+                : "bg-muted text-foreground hover:bg-muted/80"
+            }`}
+          >
+            Artworks ({pendingSubmissions.length})
+          </button>
         </div>
 
         {message && <div className="rounded-2xl bg-primary/10 p-3 text-xs font-semibold text-primary">{message}</div>}
 
-        <section className="space-y-3">
-          <div className="text-sm font-semibold">Pending applications</div>
-          {pending.length === 0 ? (
-            <div className="rounded-2xl bg-muted/50 p-4 text-center text-xs text-muted-foreground">
-              No pending applications.
+        {/* Artists Tab */}
+        {activeTab === "artists" && (
+          <section className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-card p-3 shadow-card">
+                <div className="text-[10px] text-muted-foreground">Pending</div>
+                <div className="font-display text-xl font-semibold">{pending.length}</div>
+              </div>
+              <div className="rounded-2xl bg-card p-3 shadow-card">
+                <div className="text-[10px] text-muted-foreground">Approved</div>
+                <div className="font-display text-xl font-semibold">{approved.length}</div>
+              </div>
             </div>
-          ) : (
-            pending.map((user) => (
-              <article key={user.id} className="rounded-3xl bg-card p-4 shadow-card">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-display text-base font-semibold">{user.name}</div>
-                    <div className="text-xs text-muted-foreground">{user.email}</div>
+
+            <div className="text-sm font-semibold">Pending applications</div>
+            {pending.length === 0 ? (
+              <div className="rounded-2xl bg-muted/50 p-4 text-center text-xs text-muted-foreground">
+                No pending applications.
+              </div>
+            ) : (
+              pending.map((user) => (
+                <article key={user.id} className="rounded-3xl bg-card p-4 shadow-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-display text-base font-semibold">{user.name}</div>
+                      <div className="text-xs text-muted-foreground">{user.email}</div>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
+                      {user.artistType || "Artist"}
+                    </span>
                   </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
-                    {user.artistType || "Artist"}
-                  </span>
-                </div>
 
-                <p className="mt-3 text-sm leading-6 text-foreground/80">{user.artistBio || "No bio provided."}</p>
-                <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-                  <div>Location: {user.liveLocation || "Not provided"}</div>
-                  {user.portfolioUrl && (
-                    <a href={user.portfolioUrl} className="block font-semibold text-primary">
-                      Portfolio <ExternalLink className="inline h-3 w-3" />
-                    </a>
-                  )}
-                  {user.socialUrl && (
-                    <a href={user.socialUrl} className="block font-semibold text-primary">
-                      Social <ExternalLink className="inline h-3 w-3" />
-                    </a>
-                  )}
-                  {user.callUrl && (
-                    <a href={user.callUrl} className="block font-semibold text-primary">
-                      Live call <ExternalLink className="inline h-3 w-3" />
-                    </a>
-                  )}
-                </div>
+                  <p className="mt-3 text-sm leading-6 text-foreground/80">{user.artistBio || "No bio provided."}</p>
+                  <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+                    <div>Location: {user.liveLocation || "Not provided"}</div>
+                    {user.portfolioUrl && (
+                      <a href={user.portfolioUrl} className="block font-semibold text-primary">
+                        Portfolio <ExternalLink className="inline h-3 w-3" />
+                      </a>
+                    )}
+                    {user.socialUrl && (
+                      <a href={user.socialUrl} className="block font-semibold text-primary">
+                        Social <ExternalLink className="inline h-3 w-3" />
+                      </a>
+                    )}
+                    {user.callUrl && (
+                      <a href={user.callUrl} className="block font-semibold text-primary">
+                        Live call <ExternalLink className="inline h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => decide(user.id, "collector")}
-                    className="flex items-center justify-center gap-1 rounded-2xl bg-muted py-2.5 text-xs font-semibold text-foreground"
-                  >
-                    <X className="h-3.5 w-3.5" /> Reject
-                  </button>
-                  <button
-                    onClick={() => decide(user.id, "approved")}
-                    className="flex items-center justify-center gap-1 rounded-2xl bg-primary py-2.5 text-xs font-semibold text-white"
-                  >
-                    <Check className="h-3.5 w-3.5" /> Approve
-                  </button>
-                </div>
-              </article>
-            ))
-          )}
-        </section>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => decide(user.id, "collector")}
+                      className="flex items-center justify-center gap-1 rounded-2xl bg-muted py-2.5 text-xs font-semibold text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" /> Reject
+                    </button>
+                    <button
+                      onClick={() => decide(user.id, "approved")}
+                      className="flex items-center justify-center gap-1 rounded-2xl bg-primary py-2.5 text-xs font-semibold text-white"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Approve
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+        )}
+
+        {/* Artworks Tab */}
+        {activeTab === "artworks" && (
+          <section className="space-y-3">
+            <div className="text-sm font-semibold">Artwork verification submissions</div>
+            {pendingSubmissions.length === 0 ? (
+              <div className="rounded-2xl bg-muted/50 p-4 text-center text-xs text-muted-foreground">
+                No pending artwork submissions.
+              </div>
+            ) : (
+              pendingSubmissions.map((submission) => (
+                <article key={submission.id} className="rounded-3xl bg-card p-4 shadow-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-display text-base font-semibold">{submission.artwork_name}</div>
+                      <div className="text-xs text-muted-foreground">by {submission.artist_name}</div>
+                    </div>
+                    <span className="rounded-full bg-yellow-500/20 px-2 py-1 text-[10px] font-semibold text-yellow-700">
+                      {submission.submission_status}
+                    </span>
+                  </div>
+
+                  {submission.artwork_image && (
+                    <img
+                      src={submission.artwork_image}
+                      alt={submission.artwork_name}
+                      className="mt-3 h-32 w-full rounded-2xl object-cover"
+                    />
+                  )}
+
+                  <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                    {submission.description && <p className="text-foreground">{submission.description}</p>}
+                    {submission.proof_image_url && (
+                      <a href={submission.proof_image_url} className="block font-semibold text-primary">
+                        View proof image <ExternalLink className="inline h-3 w-3" />
+                      </a>
+                    )}
+                    {submission.proof_document_url && (
+                      <a href={submission.proof_document_url} className="block font-semibold text-primary">
+                        View document <ExternalLink className="inline h-3 w-3" />
+                      </a>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      Submitted: {new Date(submission.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => rejectArtwork(submission.id)}
+                      className="flex items-center justify-center gap-1 rounded-2xl bg-muted py-2.5 text-xs font-semibold text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" /> Reject
+                    </button>
+                    <button
+                      onClick={() => approveArtwork(submission.id)}
+                      className="flex items-center justify-center gap-1 rounded-2xl bg-green-600 py-2.5 text-xs font-semibold text-white"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Verify & Mint NFT
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+        )}
       </div>
     </AppFrame>
   );

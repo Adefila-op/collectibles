@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUsers, updateArtistStatus, getAdminEventHistory, getTransactionHistory, getArtistRoyalties, type User, type AdminEvent, type Transaction, type ArtistRoyalty } from "@/lib/db";
-import { artAPI, type Art } from "@/lib/api";
+import { userAPI, artAPI, type Art } from "@/lib/api";
+import type { User } from "@/lib/db";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, TrendingUp, Users } from "lucide-react";
+
+type AdminEvent = any; // Type from backend
+type Transaction = any; // Type from backend
+type ArtistRoyalty = any; // Type from backend
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -14,24 +18,32 @@ export default function AdminDashboard() {
   const [adminEvents, setAdminEvents] = useState<AdminEvent[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [artworks, setArtworks] = useState<Art[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Admin unlock code (hardcoded for security demo - in production use backend auth)
   const ADMIN_CODE = "DIPO-ADMIN-2024";
 
   useEffect(() => {
     if (unlocked) {
-      setUsers(getUsers());
-      setAdminEvents(getAdminEventHistory(50));
-      setTransactions(getTransactionHistory());
-      const fetchArtworks = async () => {
+      const fetchData = async () => {
         try {
-          const arts = await artAPI.getAll();
-          setArtworks(arts);
+          setIsLoading(true);
+          const [fetchedUsers, fetchedArtworks] = await Promise.all([
+            userAPI.getAll(),
+            artAPI.getAll(),
+          ]);
+          setUsers(fetchedUsers);
+          setArtworks(fetchedArtworks);
+          // Note: adminEvents and transactions need backend endpoints - placeholder for now
+          setAdminEvents([]);
+          setTransactions([]);
         } catch (err) {
-          console.error("Failed to fetch artworks:", err);
+          console.error("Failed to fetch admin data:", err);
+        } finally {
+          setIsLoading(false);
         }
       };
-      fetchArtworks();
+      fetchData();
     }
   }, [unlocked]);
 

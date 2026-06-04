@@ -2,9 +2,19 @@ import art1 from "@/assets/art-1.jpg";
 import art2 from "@/assets/art-2.jpg";
 import art3 from "@/assets/art-3.jpg";
 import art4 from "@/assets/art-4.jpg";
-import { getArtworks, getArtworkById, type Art as DbArt } from "@/lib/db";
 
-export type Art = DbArt;
+export type Art = {
+  id: string;
+  name: string;
+  artist: string;
+  city: string;
+  year: number;
+  category: string;
+  price: number;
+  image: string;
+  token?: string;
+  uniqueId?: string;
+};
 
 export const ARTWORKS: Art[] = [
   { id: "harmattan", name: "Harmattan Haze", artist: "Emeka Osei", city: "Lagos", year: 2023, category: "Painting", price: 480000, image: art1, token: "0x4e3f…a91f" },
@@ -13,20 +23,19 @@ export const ARTWORKS: Art[] = [
   { id: "mask", name: "Earth Rhythm III", artist: "Adunni Bello", city: "Ibadan", year: 2024, category: "Beadwork", price: 320000, image: art4, token: "0x77a1…b03e" },
 ];
 
-// Get all artworks: static + user-created
+// Get all artworks: static only (dynamic artworks are fetched from API in components)
 export function getAllArtworks(): Art[] {
-  const dynamicArtworks = getArtworks();
-  return [...ARTWORKS, ...dynamicArtworks];
+  return ARTWORKS;
 }
 
 export const fmt = (n: number) => `₦${n.toLocaleString()}`;
 
-// Get single artwork from static + dynamic sources
+// Get single artwork from static artworks
 export function getArt(id: string): Art {
-  // First check dynamic artworks
-  const dynamicArt = getArtworkById(id);
-  if (dynamicArt) return dynamicArt;
+  // Check static artworks
+  const staticArt = ARTWORKS.find(art => art.id === id);
+  if (staticArt) return staticArt;
   
-  // Then check static artworks
+  // Return first artwork as fallback
   return ARTWORKS.find((a) => a.id === id) ?? ARTWORKS[0];
 }

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAllArtworks, fmt } from "@/lib/art-data";
-import { getUserHoldings, getHoldings } from "@/lib/db";
+import { holdingsAPI } from "@/lib/api-transactions";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +47,7 @@ export function ProfileModalDesktop({
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw" | null>(
     null
   );
+  const [userHoldings, setUserHoldings] = useState<any>({ owned: 0, listed: 0, swapped: 0, arts: [] });
   const [artistOpen, setArtistOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState("100");
   const [withdrawAmount, setWithdrawAmount] = useState("50");
@@ -62,6 +63,27 @@ export function ProfileModalDesktop({
     callUrl: "",
   });
   const [artistMessage, setArtistMessage] = useState("");
+
+  // Fetch user holdings from API
+  useEffect(() => {
+    const fetchHoldings = async () => {
+      if (user?.id && open) {
+        try {
+          const holdings = await holdingsAPI.getByUser(user.id);
+          const stats = {
+            owned: holdings.filter((h: any) => h.status === "owned").length,
+            listed: holdings.filter((h: any) => h.status === "listed").length,
+            swapped: holdings.filter((h: any) => h.status === "swapped").length,
+            arts: holdings,
+          };
+          setUserHoldings(stats);
+        } catch (error) {
+          console.error("Error fetching holdings:", error);
+        }
+      }
+    };
+    fetchHoldings();
+  }, [user?.id, open]);
 
   if (!user) {
     return (
@@ -79,9 +101,7 @@ export function ProfileModalDesktop({
     );
   }
 
-  // Get user holdings and balance
-  const userHoldings = user ? getUserHoldings(user.id) : { owned: 0, listed: 0, swapped: 0, arts: [] };
-  const allHoldings = user ? getHoldings(user.id) : [];
+  // Get user balance
   const balance = user?.walletBalance ?? 0;
   const walletAddress = walletAddressForUser(user.id);
 

@@ -1,8 +1,7 @@
 import { AppFrame } from "@/components/AppFrame";
-import { OFFERS, type Offer } from "@/lib/offers-data";
 import { ARTWORKS, getAllArtworks, fmt, type Art } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings } from "@/lib/db";
+import { holdingsAPI, offersAPI } from "@/lib/api";
 import { swapAPI } from "@/lib/api";
 import {
   ArrowDownUp,
@@ -13,22 +12,68 @@ import {
   Coins,
   ChevronRight,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+
+type Offer = {
+  id: string;
+  buyer_id: string;
+  art_id: string;
+  cash: number;
+  buyer_initials?: string;
+  buyer_city?: string;
+  placed_ago?: string;
+  category?: string;
+  status: string;
+};
 
 type Stage = 0 | 1 | 2 | 3 | 4;
 
 export default function SwapPage() {
   const { user } = useAuth();
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
+  const [allOffers, setAllOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
   const allArtworks = getAllArtworks();
   const query = new URLSearchParams(window.location.search);
   const requestedArtId = query.get("artId");
   const requestedOfferId = query.get("offerId");
-  const userHoldings = user ? getHoldings(user.id) : [];
+
+  // Fetch user holdings from API
+  useEffect(() => {
+    const fetchHoldings = async () => {
+      if (user?.id) {
+        try {
+          const holdings = await holdingsAPI.getByUserId(user.id);
+          setUserHoldings(holdings);
+        } catch (error) {
+          console.error("Error fetching holdings:", error);
+        }
+      }
+    };
+    fetchHoldings();
+  }, [user?.id]);
+
+  // Fetch real offers from API
+  useEffect(() => {
+    const fetchOffers = async () => {
+      try {
+        setLoading(true);
+        const offers = await offersAPI.getAll();
+        setAllOffers(offers.filter((o: Offer) => o.status === 'pending'));
+      } catch (error) {
+        console.error("Error fetching offers:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOffers();
+  }, []);
+
   const ownedHolding =
-    userHoldings.find((holding) => holding.status !== "swapped" && holding.artId === requestedArtId) ||
+    userHoldings.find((holding) => holding.status !== "swapped" && holding.art_id === requestedArtId) ||
     userHoldings.find((holding) => holding.status !== "swapped") ||
     null;
-  const myArt: Art = ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0];
+  const myArt: Art = ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.art_id) || ARTWORKS[0] : ARTWORKS[0];
   const [selected, setSelected] = useState<Offer | null>(null);
   const [stage, setStage] = useState<Stage>(0);
   const [message, setMessage] = useState("");
@@ -43,39 +88,30 @@ export default function SwapPage() {
 
     setIsProcessing(true);
     try {
-      // For now, use the offer data as-is since it's from OFFERS data
-      // In a real system, this would get the actual offerer's ID and artwork
-      // For demo purposes, we'll use placeholder values
-      const buyerId = "placeholder-buyer-id";
-      const buyerArtId = "placeholder-art-id";
+      // Get the offer details and buyer info
+      const result = await offersAPI.accept(offer.id, user.id);
       
-      const result = await swapAPI.propose(
-        user.id,
-        buyerId,
-        ownedHolding.artId,
-        buyerArtId,
-        offer.cash || 0
-      );
-
-      setTransactionId(result.transaction.id);
+      setTransactionId(result.transaction?.id || offer.id);
       setSelected(offer);
-      setMessage("✓ Swap proposal created! Both artworks locked in escrow.");
+      setMessage("✓ Swap proposal accepted! Artworks locked in escrow.");
+      setStage(1);
     } catch (error: any) {
-      setMessage(error.message || "Failed to create swap proposal.");
+      setMessage(error.message || "Failed to accept swap proposal.");
     } finally {
       setIsProcessing(false);
     }
   }
 
   async function completeSwap() {
-    if (!transactionId) {
+    if (!transactionId || !selected) {
       setMessage("Transaction ID not found.");
       return;
     }
 
     setIsProcessing(true);
     try {
-      const result = await swapAPI.accept(transactionId);
+      // Call the accept endpoint to complete the swap
+      const result = await offersAPI.accept(selected.id, user.id);
       setMessage("✓ Swap completed! Artworks exchanged and funds released.");
       setStage(4);
     } catch (error: any) {
@@ -85,15 +121,35 @@ export default function SwapPage() {
     }
   }
 
+  // Auto-accept the highest offer when component loads
+  useEffect(() => {
+    if (allOffers.length > 0 && !selected && myArt) {
+      // Filter offers by category matching user's artwork
+      const relevantOffers = allOffers
+        .filter((o: Offer) => !o.category || o.category === myArt.category)
+        .sort((a: Offer, b: Offer) => (b.cash || 0) - (a.cash || 0));
+      
+      if (relevantOffers.length > 0) {
+        const topOffer = relevantOffers[0];
+        // Auto-accept the top offer
+        acceptStandingOffer(topOffer);
+      }
+    }
+  }, [allOffers, myArt, selected]);
+
   const matching = useMemo(() => {
-    const offers = [...OFFERS.filter((o) => o.category === myArt.category)].sort((a, b) => b.cash - a.cash);
+    if (!myArt) return [];
+    const offers = allOffers
+      .filter((o: Offer) => !o.category || o.category === myArt.category)
+      .sort((a: Offer, b: Offer) => (b.cash || 0) - (a.cash || 0));
+    
     if (!requestedOfferId) return offers;
-    return offers.sort((a, b) => {
+    return offers.sort((a: Offer, b: Offer) => {
       if (a.id === requestedOfferId) return -1;
       if (b.id === requestedOfferId) return 1;
       return 0;
     });
-  }, [myArt.category, requestedOfferId]);
+  }, [myArt, allOffers, requestedOfferId]);
   const top = matching[0];
 
   if (selected) {
@@ -123,107 +179,112 @@ export default function SwapPage() {
         <div>
           <h2 className="font-display text-xl font-semibold">Swap into a live offer</h2>
           <p className="text-xs text-muted-foreground">
-            Buyers post standing offers for collections. Match yours in one tap — no haggling.
+            Buyers post standing offers for collections. Match yours in one tap — auto-accepts highest offer.
           </p>
         </div>
 
-        <div className="rounded-3xl bg-primary-grad p-[1px] shadow-glow animate-pop">
-          <div className="rounded-[calc(1.5rem-1px)] bg-card p-3">
-            <div className="flex items-center gap-3">
-              <img
-                src={myArt.image}
-                alt={myArt.name}
-                className="h-16 w-16 rounded-xl object-cover"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Your piece
-                </div>
-                <div className="truncate text-sm font-semibold">{myArt.name}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {myArt.category} · {myArt.artist}
-                </div>
-              </div>
-            </div>
-
-            <div className="my-3 flex items-center gap-2">
-              <div className="h-px flex-1 bg-border" />
-              <div className="grid h-8 w-8 place-items-center rounded-full bg-primary-grad text-white shadow-glow animate-float">
-                <ArrowDownUp className="h-4 w-4" />
-              </div>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-
-            {top && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] uppercase tracking-wider text-primary font-semibold flex items-center gap-1">
-                    <Sparkles className="h-3 w-3" /> Top open offer
-                  </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                    {top.id}
-                  </span>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="font-display text-3xl font-semibold text-gradient">
-                    {fmt(top.cash)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    cash{top.offeredArt && " + art"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
-                    {top.buyerInitials}
-                  </span>
-                  {top.buyer} · {top.buyerCity} · {top.placedAgo}
-                </div>
-                <button
-                  onClick={() => acceptStandingOffer(top)}
-                  disabled={isProcessing}
-                  className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
-                >
-                  {isProcessing ? "Creating swap..." : `Swap for ${fmt(top.cash)} →`}
-                </button>
-              </div>
-            )}
+        {loading ? (
+          <div className="rounded-2xl border border-border bg-muted p-6 text-center">
+            <div className="text-sm text-muted-foreground">Loading offers...</div>
           </div>
-        </div>
-
-        {matching.length > 1 && (
-          <div>
-            <div className="mb-2 text-xs font-semibold">All matching offers</div>
-            <div className="space-y-2">
-              {matching.slice(1).map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => acceptStandingOffer(o)}
-                  disabled={isProcessing}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card hover-lift disabled:opacity-50"
-                >
-                  <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
-                    {o.buyerInitials}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <div className="text-xs font-semibold">{o.buyer}</div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {o.buyerCity} · {o.placedAgo}
+        ) : allOffers.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-muted p-6 text-center">
+            <div className="text-sm text-muted-foreground">No active offers at the moment</div>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-3xl bg-primary-grad p-[1px] shadow-glow animate-pop">
+              <div className="rounded-[calc(1.5rem-1px)] bg-card p-3">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={myArt.image}
+                    alt={myArt.name}
+                    className="h-16 w-16 rounded-xl object-cover"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Your piece
+                    </div>
+                    <div className="truncate text-sm font-semibold">{myArt.name}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {myArt.category} · {myArt.artist}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold text-primary">{fmt(o.cash)}</div>
-                    {o.offeredArt && <div className="text-[10px] text-muted-foreground">+ art</div>}
+                </div>
+
+                <div className="my-3 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-border" />
+                  <div className="grid h-8 w-8 place-items-center rounded-full bg-primary-grad text-white shadow-glow animate-float">
+                    <ArrowDownUp className="h-4 w-4" />
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </button>
-              ))}
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+
+                {matching.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] uppercase tracking-wider text-primary font-semibold flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" /> {selected ? "Accepted offer" : "Top open offer"}
+                      </div>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        {matching[0].id}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="font-display text-3xl font-semibold text-gradient">
+                        {fmt(matching[0].cash || 0)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">naira</span>
+                    </div>
+                    {selected && (
+                      <button
+                        onClick={() => completeSwap()}
+                        disabled={isProcessing}
+                        className="w-full rounded-2xl bg-primary-grad py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
+                      >
+                        {isProcessing ? "Completing swap..." : "Complete Swap →"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+
+            {matching.length > 1 && (
+              <div>
+                <div className="mb-2 text-xs font-semibold">Other offers</div>
+                <div className="space-y-2">
+                  {matching.slice(1).map((o: Offer) => (
+                    <button
+                      key={o.id}
+                      onClick={() => acceptStandingOffer(o)}
+                      disabled={isProcessing}
+                      className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50 transition"
+                    >
+                      <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
+                        {o.buyer_initials || o.buyer_id?.slice(0, 2).toUpperCase() || "B"}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <div className="text-xs font-semibold">{o.buyer_city || "Buyer"}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Offer #{o.id?.slice(0, 8)}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-primary">{fmt(o.cash || 0)}</div>
+                        <div className="text-[10px] text-muted-foreground">naira</div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-[11px] text-emerald-700">
-          <ShieldCheck className="mr-1 inline h-3.5 w-3.5" /> Funds and artworks locked in escrow the moment you
-          accept. Exchanged when both parties confirm.
+          <ShieldCheck className="mr-1 inline h-3.5 w-3.5" /> Highest offer automatically accepted. Funds and artworks locked in escrow.
         </div>
 
         {message && (

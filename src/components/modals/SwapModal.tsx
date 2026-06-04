@@ -1,14 +1,14 @@
 import { OFFERS, type Offer } from "@/lib/offers-data";
 import { ARTWORKS, getAllArtworks, fmt, type Art } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings, proposeSwap, updateHoldingStatus } from "@/lib/db";
+import { holdingsAPI, swapsAPI } from "@/lib/api-transactions";
 import {
   ArrowDownUp,
   ShieldCheck,
   Sparkles,
   ChevronRight,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,27 +24,57 @@ interface SwapModalProps {
 
 export function SwapModal({ open, onOpenChange }: SwapModalProps) {
   const { user, updateWalletBalance } = useAuth();
+  const [userHoldings, setUserHoldings] = useState<any[]>([]);
   const allArtworks = getAllArtworks();
-  const ownedHolding = user ? getHoldings(user.id).find((holding) => holding.status === "owned") : null;
+
+  // Fetch user holdings on component mount
+  useEffect(() => {
+    const fetchHoldings = async () => {
+      if (user?.id) {
+        try {
+          const holdings = await holdingsAPI.getByUser(user.id);
+          setUserHoldings(holdings);
+        } catch (error) {
+          console.error("Error fetching holdings:", error);
+        }
+      }
+    };
+    if (open) {
+      fetchHoldings();
+    }
+  }, [user?.id, open]);
+
+  const ownedHolding = user ? userHoldings.find((holding) => holding.status === "owned") : null;
   const [myArt] = useState<Art>(
     ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0]
   );
   const [message, setMessage] = useState("");
 
-  function acceptStandingOffer(offer: Offer) {
+  async function acceptStandingOffer(offer: Offer) {
     if (!user || !ownedHolding) {
       setMessage("Sign in with an owned artwork before accepting a swap offer.");
       return;
     }
 
-    proposeSwap(user.id, `standing-${offer.id}`, myArt.id, offer.offeredArt?.id || offer.id);
-    setMessage(`Swap accepted! You'll receive ${fmt(offer.cash)}.`);
-    
-    // Auto-close after success message
-    setTimeout(() => {
-      onOpenChange(false);
-      setMessage("");
-    }, 1500);
+    try {
+      // Call API to propose swap
+      await swapsAPI.proposeSwap({
+        initiatorUserId: user.id,
+        initiatorHoldingId: ownedHolding.id,
+        targetHoldingId: offer.offeredArt?.id || offer.id,
+      });
+      
+      setMessage(`Swap accepted! You'll receive ${fmt(offer.cash)}.`);
+      
+      // Auto-close after success message
+      setTimeout(() => {
+        onOpenChange(false);
+        setMessage("");
+      }, 1500);
+    } catch (error) {
+      setMessage("Error proposing swap. Please try again.");
+      console.error("Error proposing swap:", error);
+    }
   }
 
   const matching = useMemo(

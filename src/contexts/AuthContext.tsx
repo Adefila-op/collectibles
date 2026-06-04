@@ -54,16 +54,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const sessionStr = localStorage.getItem("artchain_session");
-    if (sessionStr) {
-      try {
-        const session = JSON.parse(sessionStr);
-        setUser(normalizeUser(session.user));
-      } catch (err) {
-        console.error("Failed to load session:", err);
-      }
+    // Load user session from localStorage (user ID only)
+    const userId = localStorage.getItem("artchain_user_id");
+    if (userId) {
+      userAPI
+        .getById(userId)
+        .then((user) => {
+          setUser(normalizeUser(user));
+        })
+        .catch((err) => {
+          console.error("Failed to restore session:", err);
+          localStorage.removeItem("artchain_user_id");
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   const signIn = useCallback(
@@ -85,7 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         const user = normalizeUser(await response.json());
-        localStorage.setItem("artchain_session", JSON.stringify({ user }));
+        // Store only user ID in localStorage (not full user object)
+        localStorage.setItem("artchain_user_id", user.id);
         setUser(user);
         return { ok: true };
       } catch (err: any) {
@@ -103,7 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       try {
         const newUser = await userAPI.create({ email, password, name, avatar: name.charAt(0).toUpperCase() });
-        localStorage.setItem("artchain_session", JSON.stringify({ user: newUser }));
+        // Store only user ID in localStorage
+        localStorage.setItem("artchain_user_id", newUser.id);
         setUser(newUser);
         return { ok: true };
       } catch (err: any) {
@@ -114,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
-    localStorage.removeItem("artchain_session");
+    localStorage.removeItem("artchain_user_id");
     setUser(null);
   }, []);
 
@@ -133,7 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Calculate delta from latest balance
         const delta = nextBalance - (latestUser.walletBalance || 0);
         const updatedUser = await userAPI.updateWallet(user.id, delta);
-        localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
+        // Store only user ID, not full user object
+        localStorage.setItem("artchain_user_id", updatedUser.id);
         setUser(updatedUser);
         return { ok: true };
       } catch (err: any) {
@@ -177,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const confirmData = await walletAPI.confirmTopup(transactionId);
         // Refresh user data
         const updatedUser = await userAPI.getById(user.id);
-        localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
+        localStorage.setItem("artchain_user_id", updatedUser.id);
         setUser(updatedUser);
         return { ok: true, data: confirmData };
       } catch (err: any) {
@@ -207,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           liveLocation: data.liveLocation,
           callUrl: data.callUrl,
         });
-        localStorage.setItem("artchain_session", JSON.stringify({ user: updatedUser }));
+        localStorage.setItem("artchain_user_id", updatedUser.id);
         setUser(updatedUser);
         return { ok: true };
       } catch (err: any) {

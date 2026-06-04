@@ -1,8 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { BrandLogo } from "./BrandLogo";
 import { fmt } from "@/lib/art-data";
-import { artAPI } from "@/lib/api";
-import { getUsers } from "@/lib/db";
+import { artAPI, userAPI } from "@/lib/api";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -100,7 +99,21 @@ function DesktopSidebar() {
 
 export function ArtistProfileDesktop({ slug }: { slug: string }) {
   const [portfolio, setPortfolio] = useState<Art[]>([]);
-  const users = getUsers();
+  const [users, setUsers] = useState<any[]>([]);
+  
+  // Fetch users from API
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const fetchedUsers = await userAPI.getAll();
+        setUsers(fetchedUsers);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+      }
+    };
+    fetchUsers();
+  }, []);
+
   const approvedUser = users.find(
     (user) => slugify(user.name) === slug && user.artistStatus === "approved"
   );

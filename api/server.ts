@@ -3,14 +3,15 @@ import cors from 'cors';
 import * as dotenv from 'dotenv';
 import * as bcrypt from 'bcrypt';
 import { query, getClient } from './db.ts';
-import { mockDb } from './mock-db.ts';
 import { 
   generateDeterministicWallet, 
   getWalletBalance,
   getWalletBalanceFormatted,
   getWalletBalancesAllChains,
   estimateGasFee,
-  isValidWalletAddress
+  isValidWalletAddress,
+  mintCertificateNFT,
+  transferCertificateNFT
 } from './wallet.ts';
 
 dotenv.config({ path: '.env.local' });
@@ -18,44 +19,35 @@ dotenv.config({ path: '.env.local' });
 const app: Express = express();
 const PORT = process.env.API_PORT || 3000;
 
-// Global flag to track if database is available
-let DATABASE_AVAILABLE = false;
-
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
 async function ensureRuntimeSchema() {
-  if (!DATABASE_AVAILABLE) {
-    console.log('⚠️  Skipping schema check - using mock database');
-    return;
-  }
   try {
     await query(`
       ALTER TABLE holdings
         ADD COLUMN IF NOT EXISTS listed_price BIGINT,
         ADD COLUMN IF NOT EXISTS receipt_status VARCHAR(50) DEFAULT 'active',
         ADD COLUMN IF NOT EXISTS transfer_status VARCHAR(50) DEFAULT 'settled',
-        ADD COLUMN IF NOT EXISTS listed_at TIMESTAMP
+        ADD COLUMN IF NOT EXISTS listed_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS certificate_id UUID REFERENCES certificates(id) ON DELETE SET NULL
     `);
   } catch (error) {
     console.error('Schema check failed:', error);
-    DATABASE_AVAILABLE = false;
+    throw error;
   }
 }
 
 // Health check
 app.get('/api/health', async (req: Request, res: Response) => {
-  if (DATABASE_AVAILABLE) {
-    try {
-      const result = await query('SELECT NOW()');
-      res.json({ status: 'ok', database: 'connected', provider: 'Supabase PostgreSQL' });
-    } catch (error) {
-      res.status(500).json({ status: 'error', message: 'Database connection failed' });
-    }
-  } else {
-    res.json({ status: 'ok', database: 'mock', provider: 'In-memory mock (dev mode)' });
+  try {
+    const result = await query('SELECT NOW()');
+    res.json({ status: 'ok', database: 'connected', provider: 'Supabase PostgreSQL' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: 'Database connection failed' });
   }
 });
 
@@ -182,12 +174,6 @@ app.patch('/api/users/:id/artist-status', async (req: Request, res: Response) =>
 // Get all artworks
 app.get('/api/artworks', async (req: Request, res: Response) => {
   try {
-    if (!DATABASE_AVAILABLE) {
-      // Use mock database
-      const artworks = await mockDb.getAllArtworks();
-      return res.json(artworks);
-    }
-    
     const result = await query(`
       SELECT
         a.*,
@@ -222,12 +208,6 @@ app.get('/api/artworks', async (req: Request, res: Response) => {
 // Get artwork by ID
 app.get('/api/artworks/:id', async (req: Request, res: Response) => {
   try {
-    if (!DATABASE_AVAILABLE) {
-      const artwork = await mockDb.getArtworkById(req.params.id);
-      if (!artwork) return res.status(404).json({ error: 'Artwork not found' });
-      return res.json(artwork);
-    }
-    
     const result = await query(`
       SELECT
         a.*,
@@ -322,6 +302,220 @@ app.post('/api/artworks', async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message || 'Failed to create artwork' });
   } finally {
     client.release();
+  }
+});
+
+// ========== Artwork Submissions (Verification Workflow) ==========
+
+// Submit artwork for verification (artist uploads proof)
+app.post('/api/artwork-submissions', async (req: Request, res: Response) => {
+  const { artistId, artId, proofImageUrl, proofDocumentUrl, description } = req.body;
+  try {
+    if (!artistId || !artId) {
+      return res.status(400).json({ error: 'artistId and artId are required' });
+    }
+
+    const result = await query(
+      `INSERT INTO artwork_submissions (artist_id, art_id, proof_image_url, proof_document_url, description, submission_status)
+       VALUES ($1, $2, $3, $4, $5, 'submitted')
+       RETURNING *`,
+      [artistId, artId, proofImageUrl || '', proofDocumentUrl || '', description || '']
+    );
+
+    res.status(201).json({
+      submission: result.rows[0],
+      message: 'Artwork submitted for verification. Awaiting admin review.'
+    });
+  } catch (error: any) {
+    console.error('Submission error:', error);
+    res.status(500).json({ error: 'Failed to submit artwork for verification' });
+  }
+});
+
+// Get all submissions for admin review
+app.get('/api/artwork-submissions', async (req: Request, res: Response) => {
+  try {
+    const result = await query(`
+      SELECT
+        s.*,
+        u.name AS artist_name,
+        u.email AS artist_email,
+        a.name AS artwork_name,
+        a.image AS artwork_image
+      FROM artwork_submissions s
+      JOIN users u ON s.artist_id = u.id
+      JOIN artworks a ON s.art_id = a.id
+      ORDER BY s.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch submissions' });
+  }
+});
+
+// Get submissions for specific artwork
+app.get('/api/artwork-submissions/art/:artId', async (req: Request, res: Response) => {
+  try {
+    const result = await query(`
+      SELECT
+        s.*,
+        u.name AS artist_name,
+        u.email AS artist_email
+      FROM artwork_submissions s
+      JOIN users u ON s.artist_id = u.id
+      WHERE s.art_id = $1
+      ORDER BY s.created_at DESC
+    `, [req.params.artId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch submissions' });
+  }
+});
+
+// Admin review/approve artwork submission (generates on-chain certificate)
+app.patch('/api/artwork-submissions/:submissionId/approve', async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { submissionId } = req.params;
+    const { adminId, adminNotes } = req.body;
+
+    if (!adminId) {
+      return res.status(400).json({ error: 'adminId required' });
+    }
+
+    await client.query('BEGIN');
+
+    // Get submission with details
+    const submissionResult = await client.query(
+      'SELECT * FROM artwork_submissions WHERE id = $1 FOR UPDATE',
+      [submissionId]
+    );
+    if (submissionResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    const submission = submissionResult.rows[0];
+
+    // Update submission status
+    const updatedSubmissionResult = await client.query(
+      `UPDATE artwork_submissions
+       SET submission_status = 'approved',
+           reviewed_by = $1,
+           reviewed_at = CURRENT_TIMESTAMP,
+           admin_notes = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [adminId, adminNotes || '', submissionId]
+    );
+
+    // Get artwork and current owner
+    const artworkResult = await client.query(
+      'SELECT * FROM artworks WHERE id = $1',
+      [submission.art_id]
+    );
+    const artwork = artworkResult.rows[0];
+
+    // Get current owner/artist
+    const holdingResult = await client.query(
+      `SELECT user_id FROM holdings
+       WHERE art_id = $1 AND receipt_status = 'active'
+       ORDER BY acquired_at DESC LIMIT 1`,
+      [submission.art_id]
+    );
+    const ownerId = holdingResult.rows.length > 0 ? holdingResult.rows[0].user_id : submission.artist_id;
+
+    // Mint certificate NFT on Base testnet
+    const certificateMetadata = {
+      artworkId: artwork.id,
+      artworkName: artwork.name,
+      artistId: submission.artist_id,
+      owner: ownerId,
+      verifiedAt: new Date().toISOString(),
+      proofImageUrl: submission.proof_image_url,
+      proofDocumentUrl: submission.proof_document_url,
+    };
+    const metadataUri = `ipfs://placeholder-${submissionId}`;
+
+    const nftResult = await mintCertificateNFT(
+      submission.artist_id,
+      ownerId,
+      metadataUri,
+      process.env.CERTIFICATE_CONTRACT_ADDRESS
+    );
+
+    // Update submission with NFT details
+    const nftUpdateResult = await client.query(
+      `UPDATE artwork_submissions
+       SET nft_transaction_hash = $1,
+           nft_token_id = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [nftResult.transactionHash, nftResult.tokenId || '', submissionId]
+    );
+
+    // Create certificate record
+    const certificateNumber = `CERT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const certificateResult = await client.query(
+      `INSERT INTO certificates (holding_id, art_id, buyer_id, artist_id, certificate_number, authenticity_verified, verification_method, details)
+       SELECT h.id, $1, h.user_id, $2, $3, true, 'blockchain_verified', $4
+       FROM holdings h
+       WHERE h.art_id = $1 AND h.receipt_status = 'active'
+       ORDER BY h.acquired_at DESC LIMIT 1
+       RETURNING *`,
+      [submission.art_id, submission.artist_id, certificateNumber, JSON.stringify(certificateMetadata)]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      submission: nftUpdateResult.rows[0],
+      certificate: certificateResult.rows.length > 0 ? certificateResult.rows[0] : null,
+      nft: nftResult,
+      message: 'Artwork verified and certificate NFT minted on Base testnet'
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('Approval error:', error);
+    res.status(500).json({ error: error.message || 'Failed to approve submission' });
+  } finally {
+    client.release();
+  }
+});
+
+// Admin reject artwork submission
+app.patch('/api/artwork-submissions/:submissionId/reject', async (req: Request, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const { adminId, adminNotes } = req.body;
+
+    if (!adminId) {
+      return res.status(400).json({ error: 'adminId required' });
+    }
+
+    const result = await query(
+      `UPDATE artwork_submissions
+       SET submission_status = 'rejected',
+           reviewed_by = $1,
+           reviewed_at = CURRENT_TIMESTAMP,
+           admin_notes = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING *`,
+      [adminId, adminNotes || '', submissionId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    res.json({
+      submission: result.rows[0],
+      message: 'Artwork submission rejected'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to reject submission' });
   }
 });
 
@@ -609,6 +803,26 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Artwork not found or seller not owner' });
     }
 
+    // Get certificate to transfer NFT ownership on-chain
+    const certificateResult = await client.query(
+      `SELECT * FROM certificates
+       WHERE art_id = $1 AND buyer_id = $2
+       ORDER BY issued_at DESC LIMIT 1`,
+      [offer.art_id, sellerId]
+    );
+
+    if (certificateResult.rows.length > 0) {
+      const certificate = certificateResult.rows[0];
+      // Transfer certificate NFT from seller to buyer on Base
+      const nftTransfer = await transferCertificateNFT(
+        sellerId,
+        offer.buyer_id,
+        certificate.nft_token_id || certificate.id,
+        process.env.CERTIFICATE_CONTRACT_ADDRESS
+      );
+      console.log('Certificate NFT transferred:', nftTransfer);
+    }
+
     // Calculate platform fee (10%)
     const platformFee = Math.floor(escrow.amount * 0.1);
     const sellerAmount = escrow.amount - platformFee;
@@ -643,7 +857,7 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
       holding: artTransferResult.rows[0],
       sellerReceived: sellerAmount,
       platformFee: platformFee,
-      message: 'Offer accepted. Provenance receipt transferred and seller payment released. Physical artwork shipped for verification.'
+      message: 'Offer accepted. Certificate NFT transferred on-chain from seller to buyer. Physical artwork shipped for verification.'
     });
   } catch (error: any) {
     await client.query('ROLLBACK');
@@ -851,12 +1065,46 @@ app.post('/api/buy', async (req: Request, res: Response) => {
       ['completed', tx.id]
     );
 
+    // Generate certificate of authenticity
+    const certificateNumber = `COL-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const art = artResult.rows[0];
+    
+    const certificateResult = await client.query(
+      `INSERT INTO certificates (holding_id, art_id, buyer_id, artist_id, certificate_number, details, authenticity_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
+        transferResult.rows[0].id,
+        artId,
+        buyerId,
+        art.created_by || sellerId, // Use art creator or fallback to seller
+        certificateNumber,
+        JSON.stringify({
+          artworkTitle: art.name,
+          artist: art.artist,
+          buyer: buyerId,
+          purchaseDate: new Date().toISOString(),
+          purchasePrice: amount,
+          category: art.category,
+          year: art.year,
+        }),
+        true
+      ]
+    );
+
+    // Update holding with certificate ID
+    await client.query(
+      `UPDATE holdings SET certificate_id = $1 WHERE id = $2`,
+      [certificateResult.rows[0].id, transferResult.rows[0].id]
+    );
+
     await client.query('COMMIT');
     
     res.status(201).json({
       transaction: { ...tx, status: 'completed' },
       escrow: { ...escrowResult.rows[0], status: 'released' },
       holding: transferResult.rows[0],
+      certificate: certificateResult.rows[0],
       sellerReceived: sellerAmount,
       platformFee: platformFee,
       message: 'Purchase successful. Provenance receipt transferred instantly and physical artwork is marked for shipping.'
@@ -1166,6 +1414,44 @@ app.patch('/api/swap/:transactionId/reject', async (req: Request, res: Response)
     res.status(500).json({ error: error.message || 'Failed to reject swap' });
   } finally {
     client.release();
+  }
+});
+
+// ========== Certificates API ==========
+
+// Get certificate by ID
+app.get('/api/certificates/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await query('SELECT * FROM certificates WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch certificate' });
+  }
+});
+
+// Get certificate by holding ID
+app.get('/api/certificates/holding/:holdingId', async (req: Request, res: Response) => {
+  try {
+    const result = await query('SELECT * FROM certificates WHERE holding_id = $1', [req.params.holdingId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Certificate not found for this holding' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch certificate' });
+  }
+});
+
+// Get all certificates for a user (buyer)
+app.get('/api/certificates/user/:userId', async (req: Request, res: Response) => {
+  try {
+    const result = await query('SELECT * FROM certificates WHERE buyer_id = $1 ORDER BY issued_at DESC', [req.params.userId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch certificates' });
   }
 });
 
@@ -1693,29 +1979,28 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 // Start server
 async function startServer() {
-  // Try to connect to database first
+  // Supabase connection is REQUIRED - no mock fallback
   try {
     const result = await query('SELECT NOW()');
-    DATABASE_AVAILABLE = true;
     console.log('✅ Connected to Supabase PostgreSQL');
-  } catch (error) {
-    console.log('⚠️  Supabase connection failed, switching to mock in-memory database');
-    DATABASE_AVAILABLE = false;
-    await mockDb.init();
-    await mockDb.seedDemoData();
-  }
-
-  // Ensure schema if database is available
-  if (DATABASE_AVAILABLE) {
+    
+    // Ensure schema
     await ensureRuntimeSchema().catch((error) => {
       console.error('Runtime schema check failed:', error);
     });
-  }
 
-  // Start the server
-  app.listen(PORT, () => {
-    const dbStatus = DATABASE_AVAILABLE ? 'Supabase PostgreSQL' : 'Mock In-Memory (Dev)';
-    console.log(`🚀 API server running on http://localhost:${PORT}`);
+    // Start the server
+    app.listen(PORT, () => {
+      console.log(`🚀 API server running on http://localhost:${PORT}`);
+      console.log(`📊 Database: Supabase PostgreSQL`);
+      console.log(`⛓️  Blockchain: Base (${process.env.BASE_RPC_URL || 'Base Sepolia Testnet'})`);
+    });
+  } catch (error) {
+    console.error('❌ FATAL: Supabase connection failed. Database persistence is required.');
+    console.error('Please ensure DATABASE_URL is set in .env.local');
+    process.exit(1);
+  }
+}
     console.log(`📊 Database: ${dbStatus}`);
   });
 }

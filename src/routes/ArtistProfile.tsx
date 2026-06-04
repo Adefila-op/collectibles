@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { ArtistProfileDesktop } from "@/components/ArtistProfileDesktop";
 import { getAllArtworks, fmt } from "@/lib/art-data";
-import { getUsers } from "@/lib/db";
+import { userAPI } from "@/lib/api";
 import { ArrowLeft, Calendar, ExternalLink, MapPin, Star } from "lucide-react";
 import { Link } from "react-router-dom";
 

@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getArt, fmt, type Art } from "@/lib/art-data";
-import { acceptOffer, getHoldings, logAdminEvent } from "@/lib/db";
+import { offersAPI } from "@/lib/api-transactions";
 import { useAuth } from "@/contexts/AuthContext";
 import { Check, AlertCircle, Loader2 } from "lucide-react";
 
@@ -51,33 +51,14 @@ export function AcceptOfferModal({
     setError(undefined);
 
     try {
-      // Check if user owns the artwork
-      const holdings = getHoldings(user.id);
-      const ownership = holdings.find((h) => h.artId === artId && h.status === "owned");
+      // Call API to accept offer
+      await offersAPI.acceptOffer(offerId);
       
-      if (!ownership) {
-        setError("You don't own this artwork or it's not in your collection.");
-        setLoading(false);
-        return;
-      }
-
-      // Accept the offer
-      const result = acceptOffer(offerId, user.id, artId);
+      setSuccess(true);
       
-      if (result.success) {
-        // Log admin event
-        logAdminEvent("offer_accepted", user.id, {
-          offerId,
-          artId,
-          amount: offerAmount,
-          buyer: offerBuyerName,
-        });
-        
-        setSuccess(true);
-        
-        // Close modal after success
-        setTimeout(() => {
-          onOpenChange(false);
+      // Close modal after success
+      setTimeout(() => {
+        onOpenChange(false);
           setSuccess(false);
         }, 2000);
       } else {

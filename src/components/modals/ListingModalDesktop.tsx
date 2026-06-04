@@ -4,7 +4,7 @@ import { useState } from "react";
 import { topOfferForCategory } from "@/lib/offers-data";
 import { fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { addHolding, updateHoldingStatus, addArtwork, fileToBase64 } from "@/lib/db";
+import { artAPI } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -85,10 +85,15 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
     const files = event.target.files;
     if (files && files.length > 0) {
       try {
-        const base64 = await fileToBase64(files[0]);
-        setImageData(base64);
-        setMessage("Image uploaded successfully!");
-        setTimeout(() => setMessage(""), 2000);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            setImageData(e.target.result as string);
+            setMessage("Image uploaded successfully!");
+            setTimeout(() => setMessage(""), 2000);
+          }
+        };
+        reader.readAsDataURL(files[0]);
       } catch (error) {
         console.error("Error uploading image:", error);
         setMessage("Error uploading image. Please try again.");
@@ -142,21 +147,21 @@ export function ListingModalDesktop({ open, onOpenChange }: ListingModalProps) {
         }
       }
 
-      const artwork = addArtwork(
-        form.title,
-        user.name,
-        city,
-        yearNum,
-        form.category,
-        priceNum,
-        imageData || "",
-        user.id,
-        form.collectionType,
-        form.collectionType === "Larger collection" ? `${form.supply} supply` : "1"
-      );
-
-      const holding = addHolding(user.id, artwork.id, "listed");
-      updateHoldingStatus(holding.id, "listed", priceNum);
+      // Call API to create artwork + holding
+      await artAPI.create({
+        userId: user.id,
+        name: form.title,
+        artist: user.name,
+        category: form.category,
+        city: city,
+        year: yearNum,
+        price: priceNum,
+        image: imageData || "",
+        description: form.collectionType === "Larger collection" ? `${form.supply} supply` : "1",
+        collectionType: form.collectionType,
+        supplyName: form.collectionType === "Larger collection" ? form.supply : "1",
+        listImmediately: true,
+      });
 
       setMessage("Artwork published successfully!");
       setTimeout(() => {

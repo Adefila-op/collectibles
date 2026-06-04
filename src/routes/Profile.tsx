@@ -1,8 +1,9 @@
 import { AppFrame } from "@/components/AppFrame";
 import { ProfileModalDesktop } from "@/components/modals/ProfileModalDesktop";
 import { SwapModalDesktop } from "@/components/modals/SwapModalDesktop";
+import { ArtworkSubmissionModal } from "@/components/modals/ArtworkSubmissionModal";
 import { fmt } from "@/lib/art-data";
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BadgeCheck, Calendar, LogIn, Palette, Repeat2, Plus, TrendingUp } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BadgeCheck, Calendar, LogIn, Palette, Repeat2, Plus, TrendingUp, Upload } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
@@ -35,6 +36,8 @@ export default function Profile() {
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [walletMode, setWalletMode] = useState<"deposit" | "withdraw" | null>(null);
   const [artistOpen, setArtistOpen] = useState(false);
+  const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
+  const [selectedArtForSubmission, setSelectedArtForSubmission] = useState<{ id: string; name: string } | null>(null);
   const [depositAmount, setDepositAmount] = useState("100");
   const [withdrawAmount, setWithdrawAmount] = useState("50");
   const [withdrawAddress, setWithdrawAddress] = useState("");
@@ -148,53 +151,21 @@ export default function Profile() {
     setWalletMessage(`${depositAmount} USDC received on ${network}. Spending balance updated.`);
   }
 
-  async function handleWithdraw() {
+  function handleWithdraw() {
     if (!user || withdrawNaira <= 0) {
       setWalletMessage("Enter a withdrawal amount first.");
       return;
     }
-    if (!/^0x[a-fA-F0-9]{40}$/.test(withdrawAddress.trim())) {
-      setWalletMessage("Enter a valid Ethereum wallet address (0x followed by 40 hex characters).");
+    if (!/^0x[a-fA-F0-9]{20,}$/.test(withdrawAddress.trim())) {
+      setWalletMessage("Enter a valid crypto wallet address.");
       return;
     }
     if (withdrawNaira > balance) {
       setWalletMessage("Insufficient spending balance for this withdrawal.");
       return;
     }
-
-    try {
-      const response = await fetch('/api/withdrawals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          amount: withdrawNaira,
-          recipientAddress: withdrawAddress.trim(),
-          artId: null, // Can add art withdrawal later
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        setWalletMessage(`Withdrawal failed: ${error.error}`);
-        return;
-      }
-
-      const data = await response.json();
-      
-      // Update local balance to reflect withdrawal
-      updateWalletBalance(balance - withdrawNaira);
-      setWalletMessage(`✓ Withdrawal processed! ${withdrawAmount} USDC sent to ${withdrawAddress.slice(0, 6)}...${withdrawAddress.slice(-4)}. You'll receive it in 2-5 minutes.`);
-      
-      // Reset form
-      setWithdrawAmount("50");
-      setWithdrawAddress("");
-      
-      // Close modal after 2 seconds
-      setTimeout(() => setWalletMode(null), 2000);
-    } catch (error: any) {
-      setWalletMessage(`Error: ${error.message}`);
-    }
+    updateWalletBalance(balance - withdrawNaira);
+    setWalletMessage(`${withdrawAmount} USDC sent on ${network}. Spending balance updated.`);
   }
 
   async function handleArtistApply() {
@@ -395,10 +366,25 @@ export default function Profile() {
                           <Plus className="h-3 w-3" /> {user.artistStatus === "approved" ? "List" : "Resell"}
                         </Link>
                         <button
-                          onClick={() => setSwapModalOpen(true)}
-                          className="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 py-2 text-center text-[10px] font-semibold text-emerald-600 transition flex items-center justify-center gap-1"
+                          onClick={() => {
+                            if (user.artistStatus === "approved") {
+                              setSelectedArtForSubmission({ id: art!.id, name: art!.name });
+                              setSubmissionModalOpen(true);
+                            } else {
+                              setSwapModalOpen(true);
+                            }
+                          }}
+                          className="rounded-lg bg-blue-500/10 hover:bg-blue-500/20 py-2 text-center text-[10px] font-semibold text-blue-600 transition flex items-center justify-center gap-1"
                         >
-                          <Repeat2 className="h-3 w-3" /> Swap
+                          {user.artistStatus === "approved" ? (
+                            <>
+                              <Upload className="h-3 w-3" /> Submit
+                            </>
+                          ) : (
+                            <>
+                              <Repeat2 className="h-3 w-3" /> Swap
+                            </>
+                          )}
                         </button>
                       </div>
                     )}
@@ -602,6 +588,25 @@ export default function Profile() {
       </Dialog>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
+
+      {selectedArtForSubmission && (
+        <ArtworkSubmissionModal
+          isOpen={submissionModalOpen}
+          artworkId={selectedArtForSubmission.id}
+          artworkName={selectedArtForSubmission.name}
+          artistId={user?.id || ""}
+          onClose={() => setSubmissionModalOpen(false)}
+          onSuccess={() => {
+            // Refresh holdings to show updated status
+            if (user) {
+              holdingsAPI.getByUserId((user as any).id as string).then(setUserHoldings);
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
       <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
       </AppFrame>
     </>

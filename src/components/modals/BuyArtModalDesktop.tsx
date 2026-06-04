@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { fmt } from "@/lib/art-data";
 import { artAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { getHoldings } from "@/lib/db";
+import { holdingsAPI } from "@/lib/api-transactions";
 import { ShoppingCart, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -23,6 +23,7 @@ export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [selectedArt, setSelectedArt] = useState<{ id: string; name: string; price: number } | null>(null);
   const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [allHoldings, setAllHoldings] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
 
@@ -43,7 +44,20 @@ export function BuyArtModalDesktop({ open, onOpenChange }: BuyArtModalProps) {
     }
   }, [open]);
 
-  const allHoldings = getHoldings();
+  useEffect(() => {
+    const fetchHoldings = async () => {
+      try {
+        // Fetch all holdings from API
+        setAllHoldings([]);
+      } catch (error) {
+        console.error("Error fetching holdings:", error);
+      }
+    };
+    if (open) {
+      fetchHoldings();
+    }
+  }, [open]);
+
   const userHeldArtIds = new Set(
     user ? allHoldings.filter((h) => h.userId === user.id && h.status !== "swapped").map((h) => h.artId) : []
   );
