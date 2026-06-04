@@ -14,6 +14,14 @@ export type Art = {
   image: string;
   token?: string;
   uniqueId?: string;
+  createdAt?: string;
+  ownershipHistory?: Array<{ title: string; date: string; detail: string; reference: string; value?: number }>;
+  exhibitionHistory?: Array<{ title: string; date: string; detail: string; reference: string }>;
+  restorationHistory?: Array<{ title: string; date: string; detail: string; reference: string }>;
+  valuationHistory?: Array<{ amount: number; source: string; reference?: string; date?: string }>;
+  collectionName?: string;
+  supplyName?: string;
+  artistSignature?: string;
 };
 
 export const ARTWORKS: Art[] = [

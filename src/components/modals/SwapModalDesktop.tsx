@@ -63,11 +63,7 @@ export function SwapModalDesktop({ open, onOpenChange }: SwapModalProps) {
 
     try {
       // Call API to propose swap
-      await swapsAPI.proposeSwap({
-        initiatorUserId: user.id,
-        initiatorHoldingId: ownedHolding.id,
-        targetHoldingId: offer.offeredArt?.id || offer.id,
-      });
+      await swapsAPI.propose(user.id, user.id, myArt.id, ownedHolding.artId);
       
       setMessage(`Swap accepted! You'll receive ${fmt(offer.cash)}.`);
       

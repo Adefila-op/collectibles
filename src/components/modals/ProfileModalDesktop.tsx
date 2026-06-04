@@ -111,8 +111,8 @@ export function ProfileModalDesktop({
   // Calculate portfolio balance
   const uniqueOwnedIds = new Set<string>();
   const portfolioBalance = userHoldings.arts
-    .filter((holding) => holding.status === "owned")
-    .reduce((total, holding) => {
+    .filter((holding: any) => holding.status === "owned")
+    .reduce((total: number, holding: any) => {
       if (uniqueOwnedIds.has(holding.artId)) return total;
       uniqueOwnedIds.add(holding.artId);
       const art = allArtworks.find((a) => a.id === holding.artId);
@@ -124,16 +124,16 @@ export function ProfileModalDesktop({
   const uniqueArtIds = new Set<string>();
   const userArts = userHoldings.arts
     .slice(0, 2)
-    .filter((holding) => {
+    .filter((holding: any) => {
       if (uniqueArtIds.has(holding.artId)) return false;
       uniqueArtIds.add(holding.artId);
       return true;
     })
-    .map((holding) => {
+    .map((holding: any) => {
       const art = allArtworks.find((a) => a.id === holding.artId);
       return { art, holding };
     })
-    .filter((item) => item.art);
+    .filter((item: any) => item.art);
 
   const depositNaira = Math.max(
     0,
@@ -434,7 +434,7 @@ export function ProfileModalDesktop({
               <div>
                 <div className="text-sm font-semibold mb-3">My collection</div>
                 <div className="space-y-2">
-                  {userArts.map(({ art, holding }) => (
+                  {userArts.map(({ art, holding }: any) => (
                     <div
                       key={holding.id}
                       className="flex items-start gap-3 rounded-lg border border-border p-2 hover:border-primary/40 hover:bg-muted/30 transition"

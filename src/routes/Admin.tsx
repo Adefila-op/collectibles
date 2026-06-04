@@ -180,25 +180,25 @@ export default function Admin() {
                       <div className="text-xs text-muted-foreground">{user.email}</div>
                     </div>
                     <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
-                      {user.artistType || "Artist"}
+                      {user.artist_type || "Artist"}
                     </span>
                   </div>
 
-                  <p className="mt-3 text-sm leading-6 text-foreground/80">{user.artistBio || "No bio provided."}</p>
+                  <p className="mt-3 text-sm leading-6 text-foreground/80">{user.artist_bio || "No bio provided."}</p>
                   <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-                    <div>Location: {user.liveLocation || "Not provided"}</div>
-                    {user.portfolioUrl && (
-                      <a href={user.portfolioUrl} className="block font-semibold text-primary">
+                    <div>Location: {user.live_location || "Not provided"}</div>
+                    {user.portfolio_url && (
+                      <a href={user.portfolio_url} className="block font-semibold text-primary">
                         Portfolio <ExternalLink className="inline h-3 w-3" />
                       </a>
                     )}
-                    {user.socialUrl && (
-                      <a href={user.socialUrl} className="block font-semibold text-primary">
+                    {user.social_url && (
+                      <a href={user.social_url} className="block font-semibold text-primary">
                         Social <ExternalLink className="inline h-3 w-3" />
                       </a>
                     )}
-                    {user.callUrl && (
-                      <a href={user.callUrl} className="block font-semibold text-primary">
+                    {user.call_url && (
+                      <a href={user.call_url} className="block font-semibold text-primary">
                         Live call <ExternalLink className="inline h-3 w-3" />
                       </a>
                     )}

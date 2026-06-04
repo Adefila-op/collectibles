@@ -5,6 +5,7 @@ import { getAllArtworks, fmt } from "@/lib/art-data";
 import { userAPI } from "@/lib/api";
 import { ArrowLeft, Calendar, ExternalLink, MapPin, Star } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -64,17 +65,30 @@ const STATIC_ARTISTS: Record<string, {
 
 export default function ArtistProfile() {
   const { slug } = useParams<{ slug: string }>();
-  const users = getUsers();
-  const approvedUser = users.find((user) => slugify(user.name) === slug && user.artistStatus === "approved");
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const fetchedUsers = await userAPI.getAll();
+        setUsers(fetchedUsers);
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+      }
+    }
+    fetchUsers();
+  }, []);
+
+  const approvedUser = users.find((user: any) => slugify(user.name) === slug && user.artistStatus === "approved");
   const profile = approvedUser
     ? {
         name: approvedUser.name,
-        type: approvedUser.artistType || "Artist",
-        bio: approvedUser.artistBio || "Approved COllectible artist.",
-        portfolioUrl: approvedUser.portfolioUrl || "",
-        socialUrl: approvedUser.socialUrl || "",
-        liveLocation: approvedUser.liveLocation || "Location shared on request",
-        callUrl: approvedUser.callUrl || "",
+        type: approvedUser.artist_type || "Artist",
+        bio: approvedUser.artist_bio || "Approved COllectible artist.",
+        portfolioUrl: approvedUser.portfolio_url || "",
+        socialUrl: approvedUser.social_url || "",
+        liveLocation: approvedUser.live_location || "Location shared on request",
+        callUrl: approvedUser.call_url || "",
         rating: "New",
       }
     : STATIC_ARTISTS[slug || ""] ?? STATIC_ARTISTS[slugify("Emeka Osei")];

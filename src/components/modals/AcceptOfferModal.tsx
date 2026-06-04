@@ -52,18 +52,15 @@ export function AcceptOfferModal({
 
     try {
       // Call API to accept offer
-      await offersAPI.acceptOffer(offerId);
+      await offersAPI.accept(offerId, user.id);
       
       setSuccess(true);
       
       // Close modal after success
       setTimeout(() => {
         onOpenChange(false);
-          setSuccess(false);
-        }, 2000);
-      } else {
-        setError(result.error || "Failed to accept offer. Please try again.");
-      }
+        setSuccess(false);
+      }, 2000);
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       console.error(err);

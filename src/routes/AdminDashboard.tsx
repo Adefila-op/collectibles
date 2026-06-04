@@ -57,14 +57,26 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleApproveArtist = (userId: string) => {
-    updateArtistStatus(userId, "approved");
-    setUsers(getUsers());
+  const handleApproveArtist = async (userId: string) => {
+    try {
+      await userAPI.updateArtistStatus(userId, "approved");
+      const updatedUsers = await userAPI.getAll();
+      setUsers(updatedUsers);
+    } catch (err) {
+      setError("Failed to approve artist");
+      console.error(err);
+    }
   };
 
-  const handleRejectArtist = (userId: string) => {
-    updateArtistStatus(userId, "collector");
-    setUsers(getUsers());
+  const handleRejectArtist = async (userId: string) => {
+    try {
+      await userAPI.updateArtistStatus(userId, "collector");
+      const updatedUsers = await userAPI.getAll();
+      setUsers(updatedUsers);
+    } catch (err) {
+      setError("Failed to reject artist");
+      console.error(err);
+    }
   };
 
   if (!unlocked) {

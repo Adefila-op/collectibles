@@ -625,7 +625,7 @@ export default function ArtDetail() {
 
           <HistorySection icon={<History className="h-4 w-4" />} title="Ownership history">
             <div className="space-y-2">
-              {ownershipHistory.map((event, index) => (
+              {ownershipHistory.map((event: any, index: number) => (
                 <div key={`${event.title}-${index}`} className="flex gap-3">
                   <div className="flex flex-col items-center">
                     <div className="h-2.5 w-2.5 rounded-full bg-primary" />
@@ -649,7 +649,7 @@ export default function ArtDetail() {
 
           <HistorySection icon={<Landmark className="h-4 w-4" />} title="Exhibition history">
             <div className="space-y-2">
-              {exhibitionHistory.map((event, index) => (
+              {exhibitionHistory.map((event: any, index: number) => (
                 <div key={`${event.title}-${index}`} className="rounded-xl bg-muted/40 p-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="text-xs font-semibold">{event.title}</div>
@@ -673,7 +673,7 @@ export default function ArtDetail() {
           >
             {restorationHistory.length > 0 ? (
               <div className="space-y-2">
-                {restorationHistory.map((event, index) => (
+                {restorationHistory.map((event: any, index: number) => (
                   <div key={`${event.title}-${index}`} className="rounded-xl bg-muted/40 p-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="text-xs font-semibold">{event.title}</div>
@@ -688,7 +688,7 @@ export default function ArtDetail() {
 
           <HistorySection icon={<TrendingUp className="h-4 w-4" />} title="Valuation history">
             <div className="space-y-2">
-              {valuationHistory.map((event, index) => (
+              {valuationHistory.map((event: any, index: number) => (
                 <div
                   key={`${event.source}-${index}`}
                   className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 p-2"

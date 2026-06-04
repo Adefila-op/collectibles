@@ -32,6 +32,7 @@ export default function ListArt() {
   const [listPrice, setListPrice] = useState<string>("");
   const [acceptSwaps, setAcceptSwaps] = useState(true);
   const [proof, setProof] = useState(true);
+  const [userHoldingsData, setUserHoldingsData] = useState<any[]>([]);
   const [form, setForm] = useState<ListingForm>({
     title: "Harmattan Haze",
     category: "Painting",
@@ -47,9 +48,17 @@ export default function ListArt() {
   // Check if this is a reselling flow (artId provided) or new creation
   const isReselling = !!artId;
   const resellArt = artId ? getArt(artId) : null;
-  const userHoldings = user ? getHoldings(user.id) : [];
-  const ownedArtwork = resellArt && userHoldings.find(h => h.artId === resellArt.id && h.status === "owned");
+  const ownedArtwork = resellArt && userHoldingsData.find((h: any) => h.artId === resellArt.id && h.status === "owned");
   
+  // Fetch user holdings
+  useEffect(() => {
+    if (user?.id) {
+      holdingsAPI.getByUser(user.id).then(setUserHoldingsData).catch(err => {
+        console.error("Failed to fetch holdings:", err);
+      });
+    }
+  }, [user?.id]);
+
   // Update form with resell artwork data if applicable
   useEffect(() => {
     if (resellArt) {
@@ -183,7 +192,7 @@ export default function ListArt() {
       // Handle reselling existing artwork
       if (isReselling && resellArt && ownedArtwork) {
         // For reselling, just update the price and mark as listed
-        updateHoldingStatus(ownedArtwork.id, "listed", priceNum);
+        await holdingsAPI.update(ownedArtwork.id, user.id, "listed", priceNum);
         alert("Artwork listed for resale successfully!");
         navigate("/profile");
         return;

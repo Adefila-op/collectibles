@@ -421,6 +421,7 @@ export default function Profile() {
           </div>
         )}
       </div>
+      </AppFrame>
 
       <Dialog open={walletMode !== null} onOpenChange={(open) => !open && setWalletMode(null)}>
         <DialogContent className="max-w-[390px] rounded-3xl border-0 p-0 overflow-hidden">
@@ -604,11 +605,6 @@ export default function Profile() {
           }}
         />
       )}
-    </>
-  );
-}
-      <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
-      </AppFrame>
     </>
   );
 }

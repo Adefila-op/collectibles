@@ -110,6 +110,10 @@ export default function SwapPage() {
 
     setIsProcessing(true);
     try {
+      if (!user) {
+        setMessage("You must be logged in to accept offers.");
+        return;
+      }
       // Call the accept endpoint to complete the swap
       const result = await offersAPI.accept(selected.id, user.id);
       setMessage("✓ Swap completed! Artworks exchanged and funds released.");
@@ -352,11 +356,11 @@ function AcceptedFlow({
           />
           <ArrowDownUp className="h-4 w-4 text-white/80" />
           <div className="grid h-14 w-14 place-items-center rounded-xl bg-white/15 text-lg font-semibold">
-            {offer.buyerInitials}
+            {offer.buyer_initials || "B"}
           </div>
         </div>
         <div className="mt-3 font-display text-2xl font-semibold">{fmt(offer.cash)}</div>
-        <div className="text-xs text-white/80">from {offer.buyer} · escrow locked</div>
+        <div className="text-xs text-white/80">from buyer · escrow locked</div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
