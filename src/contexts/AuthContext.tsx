@@ -78,8 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       try {
+        if (!supabase) {
+          return { ok: false, error: "Supabase configuration is missing. Please ensure environment variables are set." };
+        }
         // Sign in with Supabase Auth
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        const { data: authData, error: authError } = await supabase?.auth.signInWithPassword({
           email,
           password,
         });
@@ -235,3 +238,4 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 }
+

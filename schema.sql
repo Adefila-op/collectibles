@@ -116,24 +116,6 @@ CREATE TABLE IF NOT EXISTS admin_events (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Artwork Submissions (artist verification flow)
-CREATE TABLE IF NOT EXISTS artwork_submissions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  artist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  art_id UUID NOT NULL REFERENCES artworks(id) ON DELETE CASCADE,
-  proof_image_url VARCHAR(500),
-  proof_document_url VARCHAR(500),
-  description TEXT,
-  submission_status VARCHAR(50) DEFAULT 'submitted',
-  admin_notes TEXT,
-  reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
-  reviewed_at TIMESTAMP,
-  nft_transaction_hash VARCHAR(255),
-  nft_token_id VARCHAR(255),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Certificates Table (for artwork provenance)
 CREATE TABLE IF NOT EXISTS certificates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -163,6 +145,3 @@ CREATE INDEX idx_admin_events_admin_id ON admin_events(admin_id);
 CREATE INDEX idx_certificates_holding_id ON certificates(holding_id);
 CREATE INDEX idx_certificates_buyer_id ON certificates(buyer_id);
 CREATE INDEX idx_certificates_art_id ON certificates(art_id);
-CREATE INDEX idx_submissions_artist_id ON artwork_submissions(artist_id);
-CREATE INDEX idx_submissions_art_id ON artwork_submissions(art_id);
-CREATE INDEX idx_submissions_status ON artwork_submissions(submission_status);

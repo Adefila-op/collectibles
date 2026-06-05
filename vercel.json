@@ -15,6 +15,8 @@
     }
   ],
   "env": {
-    "VITE_API_URL": ""
+    "VITE_API_URL": "",
+    "VITE_SUPABASE_URL": "https://vcsyszyzlaodsleucbla.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "sb_publishable_oR3oMgWx9O5S-nVDaAxn8g_OS8-dG7F"
   }
 }

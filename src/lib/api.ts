@@ -1,10 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
+}
+
+export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY 
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+// Helper to ensure supabase is initialized
+function getSupabase() {
+  if (!supabase) {
+    throw new Error('Supabase configuration missing. Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.');
+  }
+  return supabase;
+}
 
 // Add property aliases for backward compatibility
 function addUserAliases(user: any): any {
@@ -137,25 +151,25 @@ export interface Certificate {
 // User API
 export const userAPI = {
   getAll: async () => {
-    const { data, error } = await supabase.from('users').select('*');
+    const { data, error } = await getSupabase().from('users').select('*');
     if (error) throw error;
     return (data || []).map(addUserAliases);
   },
   getById: async (id: string) => {
-    const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
+    const { data, error } = await getSupabase().from('users').select('*').eq('id', id).single();
     if (error) throw error;
     return addUserAliases(data);
   },
   create: async (user: Partial<User> & { password: string }) => {
     // Sign up user with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await getSupabase().auth.signUp({
       email: user.email || '',
       password: user.password,
     });
     if (authError) throw authError;
 
     // Create user profile in database
-    const { data, error } = await supabase.from('users').insert({
+    const { data, error } = await getSupabase().from('users').insert({
       id: authData.user?.id,
       email: user.email,
       name: user.name,
@@ -167,8 +181,7 @@ export const userAPI = {
     return addUserAliases(data);
   },
   updateWallet: async (userId: string, amount: number) => {
-    const { data, error } = await supabase
-      .from('users')
+    const { data, error } = await getSupabase().from('users')
       .update({ wallet_balance: amount })
       .eq('id', userId)
       .select()
@@ -177,8 +190,7 @@ export const userAPI = {
     return addUserAliases(data);
   },
   updateArtistStatus: async (userId: string, data: any) => {
-    const { data: updatedUser, error } = await supabase
-      .from('users')
+    const { data: updatedUser, error } = await getSupabase().from('users')
       .update({
         artist_status: data.artist_status,
         artist_type: data.artist_type,
@@ -199,18 +211,17 @@ export const userAPI = {
 // Artwork API
 export const artAPI = {
   getAll: async () => {
-    const { data, error } = await supabase.from('artworks').select('*');
+    const { data, error } = await getSupabase().from('artworks').select('*');
     if (error) throw error;
     return (data || []).map(addArtAliases);
   },
   getById: async (id: string) => {
-    const { data, error } = await supabase.from('artworks').select('*').eq('id', id).single();
+    const { data, error } = await getSupabase().from('artworks').select('*').eq('id', id).single();
     if (error) throw error;
     return addArtAliases(data);
   },
   create: async (artwork: any) => {
-    const { data, error } = await supabase
-      .from('artworks')
+    const { data, error } = await getSupabase().from('artworks')
       .insert(artwork)
       .select()
       .single();
@@ -222,24 +233,21 @@ export const artAPI = {
 // Holdings API
 export const holdingsAPI = {
   getByUserId: async (userId: string) => {
-    const { data, error } = await supabase
-      .from('holdings')
+    const { data, error } = await getSupabase().from('holdings')
       .select('*')
       .eq('user_id', userId);
     if (error) throw error;
     return (data || []).map(addArtAliases);
   },
   getByUser: async (userId: string) => {
-    const { data, error } = await supabase
-      .from('holdings')
+    const { data, error } = await getSupabase().from('holdings')
       .select('*')
       .eq('user_id', userId);
     if (error) throw error;
     return (data || []).map(addArtAliases);
   },
   create: async (holding: any) => {
-    const { data, error } = await supabase
-      .from('holdings')
+    const { data, error } = await getSupabase().from('holdings')
       .insert(holding)
       .select()
       .single();
@@ -247,8 +255,7 @@ export const holdingsAPI = {
     return addArtAliases(data);
   },
   update: async (holdingId: string, userId: string, updateData: any) => {
-    const { data, error } = await supabase
-      .from('holdings')
+    const { data, error } = await getSupabase().from('holdings')
       .update(updateData)
       .eq('id', holdingId)
       .eq('user_id', userId)
@@ -262,21 +269,19 @@ export const holdingsAPI = {
 // Offers API
 export const offersAPI = {
   getAll: async () => {
-    const { data, error } = await supabase.from('offers').select('*');
+    const { data, error } = await getSupabase().from('offers').select('*');
     if (error) throw error;
     return data || [];
   },
   getByArtId: async (artId: string) => {
-    const { data, error } = await supabase
-      .from('offers')
+    const { data, error } = await getSupabase().from('offers')
       .select('*')
       .eq('art_id', artId);
     if (error) throw error;
     return data || [];
   },
   create: async (buyerId: string, artId: string, amount: number) => {
-    const { data, error } = await supabase
-      .from('offers')
+    const { data, error } = await getSupabase().from('offers')
       .insert({ buyer_id: buyerId, art_id: artId, amount, status: 'pending' })
       .select()
       .single();
@@ -284,8 +289,7 @@ export const offersAPI = {
     return data;
   },
   accept: async (offerId: string, sellerId: string) => {
-    const { data, error } = await supabase
-      .from('offers')
+    const { data, error } = await getSupabase().from('offers')
       .update({ status: 'accepted' })
       .eq('id', offerId)
       .select()
@@ -294,8 +298,7 @@ export const offersAPI = {
     return data;
   },
   reject: async (offerId: string) => {
-    const { data, error } = await supabase
-      .from('offers')
+    const { data, error } = await getSupabase().from('offers')
       .update({ status: 'rejected' })
       .eq('id', offerId)
       .select()
@@ -308,8 +311,7 @@ export const offersAPI = {
 // Swap API
 export const swapAPI = {
   propose: async (userId1: string, userId2: string, artId1: string, artId2: string, cashAmount: number = 0) => {
-    const { data, error } = await supabase
-      .from('transactions')
+    const { data, error } = await getSupabase().from('transactions')
       .insert({
         type: 'swap',
         from_user_id: userId1,
@@ -323,8 +325,7 @@ export const swapAPI = {
     return data;
   },
   accept: async (transactionId: string) => {
-    const { data, error } = await supabase
-      .from('transactions')
+    const { data, error } = await getSupabase().from('transactions')
       .update({ status: 'completed' })
       .eq('id', transactionId)
       .select()
@@ -333,8 +334,7 @@ export const swapAPI = {
     return data;
   },
   reject: async (transactionId: string) => {
-    const { data, error } = await supabase
-      .from('transactions')
+    const { data, error } = await getSupabase().from('transactions')
       .update({ status: 'rejected' })
       .eq('id', transactionId)
       .select()
@@ -347,13 +347,12 @@ export const swapAPI = {
 // Transactions API
 export const transactionsAPI = {
   getAll: async (limit: number = 50) => {
-    const { data, error } = await supabase.from('transactions').select('*').limit(limit);
+    const { data, error } = await getSupabase().from('transactions').select('*').limit(limit);
     if (error) throw error;
     return data || [];
   },
   getByUserId: async (userId: string) => {
-    const { data, error } = await supabase
-      .from('transactions')
+    const { data, error } = await getSupabase().from('transactions')
       .select('*')
       .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`);
     if (error) throw error;
@@ -365,8 +364,7 @@ export const transactionsAPI = {
 export const purchaseAPI = {
   buy: async (buyerId: string, artId: string, amount: number, sellerId: string) => {
     // Create a transaction record for the purchase
-    const { data, error } = await supabase
-      .from('transactions')
+    const { data, error } = await getSupabase().from('transactions')
       .insert({
         type: 'purchase',
         buyer_id: buyerId,
@@ -386,8 +384,7 @@ export const purchaseAPI = {
 // Submission API
 export const submissionAPI = {
   submit: async (submission: any) => {
-    const { data, error } = await supabase
-      .from('artwork_submissions')
+    const { data, error } = await getSupabase().from('artwork_submissions')
       .insert(submission)
       .select()
       .single();
@@ -395,13 +392,12 @@ export const submissionAPI = {
     return data;
   },
   getAll: async () => {
-    const { data, error } = await supabase.from('artwork_submissions').select('*');
+    const { data, error } = await getSupabase().from('artwork_submissions').select('*');
     if (error) throw error;
     return data || [];
   },
   approve: async (submissionId: string) => {
-    const { data, error } = await supabase
-      .from('artwork_submissions')
+    const { data, error } = await getSupabase().from('artwork_submissions')
       .update({ submission_status: 'approved' })
       .eq('id', submissionId)
       .select()
@@ -410,8 +406,7 @@ export const submissionAPI = {
     return data;
   },
   reject: async (submissionId: string) => {
-    const { data, error } = await supabase
-      .from('artwork_submissions')
+    const { data, error } = await getSupabase().from('artwork_submissions')
       .update({ submission_status: 'rejected' })
       .eq('id', submissionId)
       .select()
@@ -420,3 +415,6 @@ export const submissionAPI = {
     return data;
   },
 };
+
+
+
