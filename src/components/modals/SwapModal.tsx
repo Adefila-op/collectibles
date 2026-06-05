@@ -1,5 +1,6 @@
-import { OFFERS, type Offer } from "@/lib/offers-data";
-import { ARTWORKS, getAllArtworks, fmt, type Art } from "@/lib/art-data";
+import { type Offer } from "@/lib/offers-data";
+import { fmt, type Art } from "@/lib/art-data";
+import { artAPI, offersAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { holdingsAPI, swapsAPI } from "@/lib/api-transactions";
 import {
@@ -25,30 +26,36 @@ interface SwapModalProps {
 export function SwapModal({ open, onOpenChange }: SwapModalProps) {
   const { user, updateWalletBalance } = useAuth();
   const [userHoldings, setUserHoldings] = useState<any[]>([]);
-  const allArtworks = getAllArtworks();
+  const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [allOffers, setAllOffers] = useState<Offer[]>([]);
+  const [message, setMessage] = useState("");
 
-  // Fetch user holdings on component mount
+  // Fetch user holdings, artworks, and offers on component mount
   useEffect(() => {
-    const fetchHoldings = async () => {
-      if (user?.id) {
+    const fetchData = async () => {
+      if (user?.id && open) {
         try {
-          const holdings = await holdingsAPI.getByUser(user.id);
-          setUserHoldings(holdings);
+          const [holdings, artworks, offers] = await Promise.all([
+            holdingsAPI.getByUser(user.id),
+            artAPI.getAll(),
+            offersAPI.getAll(),
+          ]);
+          setUserHoldings(holdings || []);
+          setAllArtworks(artworks || []);
+          setAllOffers(offers || []);
         } catch (error) {
-          console.error("Error fetching holdings:", error);
+          console.error("Error fetching data:", error);
         }
       }
     };
-    if (open) {
-      fetchHoldings();
-    }
+    fetchData();
   }, [user?.id, open]);
 
-  const ownedHolding = user ? userHoldings.find((holding) => holding.status === "owned") : null;
-  const [myArt] = useState<Art>(
-    ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.artId) || ARTWORKS[0] : ARTWORKS[0]
-  );
-  const [message, setMessage] = useState("");
+  const ownedHolding = user ? userHoldings.find((holding: any) => holding.status === "owned") : null;
+  const defaultArt: Art = { id: "0", name: "Select an artwork", price: 0, artist: "System", city: "", year: 2024, category: "Painting", image: "" };
+  const myArt: Art = ownedHolding && allArtworks.length > 0 
+    ? allArtworks.find((art: any) => art.id === ownedHolding.artId) || defaultArt
+    : defaultArt;
 
   async function acceptStandingOffer(offer: Offer) {
     if (!user || !ownedHolding) {
@@ -75,8 +82,8 @@ export function SwapModal({ open, onOpenChange }: SwapModalProps) {
 
   const matching = useMemo(
     () =>
-      [...OFFERS.filter((o) => o.category === myArt.category)].sort((a, b) => b.cash - a.cash),
-    [myArt.category]
+      allOffers.filter((o: any) => o.category === myArt.category).sort((a: any, b: any) => b.cash - a.cash),
+    [myArt.category, allOffers]
   );
   const top = matching[0];
 

@@ -1,9 +1,8 @@
 import { Camera, Sparkles, Zap } from "lucide-react";
-import { useState } from "react";
-import { topOfferForCategory } from "@/lib/offers-data";
+import { useState, useEffect } from "react";
 import { fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { artAPI } from "@/lib/api";
+import { artAPI, offersAPI } from "@/lib/api";
 import { holdingsAPI } from "@/lib/api-transactions";
 import {
   Dialog,
@@ -34,6 +33,7 @@ export function ListingModal({ open, onOpenChange }: ListingModalProps) {
   const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [imageData, setImageData] = useState<string>("");
+  const [topOffer, setTopOffer] = useState<any | null>(null);
   const [form, setForm] = useState<ListingForm>({
     title: "",
     category: "Painting",
@@ -47,7 +47,20 @@ export function ListingModal({ open, onOpenChange }: ListingModalProps) {
   });
   const [proof, setProof] = useState(true);
   const [message, setMessage] = useState("");
-  const topOffer = topOfferForCategory("Painting");
+
+  // Fetch top offer for category
+  useEffect(() => {
+    offersAPI.getAll().then(offers => {
+      if (offers) {
+        const topOfferForCategory = offers
+          .filter((o: any) => o.category === form.category)
+          .sort((a: any, b: any) => b.cash - a.cash)[0];
+        setTopOffer(topOfferForCategory || null);
+      }
+    }).catch(err => {
+      console.error("Failed to fetch offers:", err);
+    });
+  }, [form.category]);
 
   if (!user || user.artist_status !== "approved") {
     return (

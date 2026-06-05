@@ -6,8 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getArt, fmt, type Art } from "@/lib/art-data";
-import { offersAPI } from "@/lib/api-transactions";
+import { fmt, type Art } from "@/lib/art-data";
+import { offersAPI, artAPI } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Check, AlertCircle, Loader2 } from "lucide-react";
 
@@ -33,11 +33,15 @@ export function AcceptOfferModal({
   const [art, setArt] = useState<Art | null>(null);
 
   useEffect(() => {
-    if (open) {
-      const artwork = getArt(artId);
-      setArt(artwork);
-      setSuccess(false);
-      setError(undefined);
+    if (open && artId) {
+      artAPI.getById(artId).then(artwork => {
+        setArt(artwork);
+        setSuccess(false);
+        setError(undefined);
+      }).catch(err => {
+        console.error("Failed to fetch artwork:", err);
+        setError("Failed to load artwork");
+      });
     }
   }, [open, artId]);
 

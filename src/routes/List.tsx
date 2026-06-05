@@ -2,10 +2,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { Camera, Sparkles, Zap } from "lucide-react";
 import { useState, useEffect } from "react";
-import { topOfferForCategory } from "@/lib/offers-data";
-import { fmt, getArt } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { artAPI } from "@/lib/api";
+import { artAPI, offersAPI } from "@/lib/api";
 import { holdingsAPI } from "@/lib/api-transactions";
 
 interface ListingForm {
@@ -33,6 +32,8 @@ export default function ListArt() {
   const [acceptSwaps, setAcceptSwaps] = useState(true);
   const [proof, setProof] = useState(true);
   const [userHoldingsData, setUserHoldingsData] = useState<any[]>([]);
+  const [resellArt, setResellArt] = useState<any | null>(null);
+  const [allOffers, setAllOffers] = useState<any[]>([]);
   const [form, setForm] = useState<ListingForm>({
     title: "Harmattan Haze",
     category: "Painting",
@@ -47,17 +48,30 @@ export default function ListArt() {
   
   // Check if this is a reselling flow (artId provided) or new creation
   const isReselling = !!artId;
-  const resellArt = artId ? getArt(artId) : null;
   const ownedArtwork = resellArt && userHoldingsData.find((h: any) => h.artId === resellArt.id && h.status === "owned");
   
-  // Fetch user holdings
+  // Fetch resell artwork and user holdings
   useEffect(() => {
     if (user?.id) {
       holdingsAPI.getByUser(user.id).then(setUserHoldingsData).catch(err => {
         console.error("Failed to fetch holdings:", err);
       });
     }
-  }, [user?.id]);
+    if (artId) {
+      artAPI.getById(artId).then(setResellArt).catch(err => {
+        console.error("Failed to fetch artwork:", err);
+      });
+    }
+  }, [user?.id, artId]);
+
+  // Fetch offers for top offer logic
+  useEffect(() => {
+    offersAPI.getAll().then(offers => {
+      setAllOffers(offers || []);
+    }).catch(err => {
+      console.error("Failed to fetch offers:", err);
+    });
+  }, []);
 
   // Update form with resell artwork data if applicable
   useEffect(() => {
@@ -149,7 +163,9 @@ export default function ListArt() {
     );
   }
   
-  const topOffer = topOfferForCategory(form.category);
+  const topOffer = allOffers
+    .filter((o: any) => o.category === form.category)
+    .sort((a: any, b: any) => b.cash - a.cash)[0] || null;
 
   const handleInputChange = (field: keyof ListingForm, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));

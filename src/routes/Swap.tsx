@@ -1,7 +1,7 @@
 import { AppFrame } from "@/components/AppFrame";
-import { ARTWORKS, getAllArtworks, fmt, type Art } from "@/lib/art-data";
+import { fmt, type Art } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { holdingsAPI, offersAPI } from "@/lib/api";
+import { holdingsAPI, offersAPI, artAPI } from "@/lib/api";
 import { swapAPI } from "@/lib/api";
 import {
   ArrowDownUp,
@@ -32,48 +32,39 @@ export default function SwapPage() {
   const { user } = useAuth();
   const [userHoldings, setUserHoldings] = useState<any[]>([]);
   const [allOffers, setAllOffers] = useState<Offer[]>([]);
+  const [allArtworks, setAllArtworks] = useState<Art[]>([]);
   const [loading, setLoading] = useState(true);
-  const allArtworks = getAllArtworks();
   const query = new URLSearchParams(window.location.search);
   const requestedArtId = query.get("artId");
   const requestedOfferId = query.get("offerId");
 
-  // Fetch user holdings from API
+  // Fetch all data from API
   useEffect(() => {
-    const fetchHoldings = async () => {
-      if (user?.id) {
-        try {
-          const holdings = await holdingsAPI.getByUserId(user.id);
-          setUserHoldings(holdings);
-        } catch (error) {
-          console.error("Error fetching holdings:", error);
-        }
-      }
-    };
-    fetchHoldings();
-  }, [user?.id]);
-
-  // Fetch real offers from API
-  useEffect(() => {
-    const fetchOffers = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const offers = await offersAPI.getAll();
-        setAllOffers(offers.filter((o: Offer) => o.status === 'pending'));
+        const [holdings, offers, artworks] = await Promise.all([
+          user?.id ? holdingsAPI.getByUserId(user.id) : Promise.resolve([]),
+          offersAPI.getAll(),
+          artAPI.getAll(),
+        ]);
+        setUserHoldings(holdings || []);
+        setAllOffers((offers || []).filter((o: Offer) => o.status === 'pending'));
+        setAllArtworks(artworks || []);
       } catch (error) {
-        console.error("Error fetching offers:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchOffers();
-  }, []);
+    fetchData();
+  }, [user?.id]);
 
   const ownedHolding =
     userHoldings.find((holding) => holding.status !== "swapped" && holding.art_id === requestedArtId) ||
     userHoldings.find((holding) => holding.status !== "swapped") ||
     null;
-  const myArt: Art = ownedHolding ? allArtworks.find((art) => art.id === ownedHolding.art_id) || ARTWORKS[0] : ARTWORKS[0];
+  const myArt: Art = ownedHolding ? (allArtworks.find((art) => art.id === ownedHolding.art_id) || allArtworks[0]) : (allArtworks[0] || { id: "placeholder", name: "Your Art", artist: "You", city: "Location", year: 2024, category: "Art", price: 0, image: "" } as Art);
   const [selected, setSelected] = useState<Offer | null>(null);
   const [stage, setStage] = useState<Stage>(0);
   const [message, setMessage] = useState("");

@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
-import { getAllArtworks, fmt } from "@/lib/art-data";
-import { holdingsAPI } from "@/lib/api-transactions";
+import { fmt } from "@/lib/art-data";
+import { artAPI, holdingsAPI } from "@/lib/api";
 import {
   Repeat2,
   Search,
@@ -16,25 +16,29 @@ import { useEffect, useState } from "react";
 export default function Home() {
   const { user } = useAuth();
   const [userHoldings, setUserHoldings] = useState<any[]>([]);
+  const [allArtworks, setAllArtworks] = useState<any[]>([]);
   const greeting = user ? user.name.split(" ")[0] : "Collector";
   const initials = user ? user.avatar : "?";
 
   useEffect(() => {
-    const fetchHoldings = async () => {
-      if (user?.id) {
-        try {
-          const holdings = await holdingsAPI.getByUser(user.id);
-          setUserHoldings(holdings);
-        } catch (error) {
-          console.error("Error fetching holdings:", error);
-        }
+    const fetchData = async () => {
+      try {
+        const [artworks, holdings] = await Promise.all([
+          artAPI.getAll(),
+          user?.id ? holdingsAPI.getByUser(user.id) : Promise.resolve([]),
+        ]);
+        setAllArtworks(artworks || []);
+        setUserHoldings(holdings || []);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setAllArtworks([]);
+        setUserHoldings([]);
       }
     };
-    fetchHoldings();
+    fetchData();
   }, [user?.id]);
 
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
-  const allArtworks = getAllArtworks();
 
   return (
     <AppFrame label="Home · Discover" desktop={<DesktopLanding />}>

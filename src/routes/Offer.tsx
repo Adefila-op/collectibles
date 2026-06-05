@@ -1,20 +1,32 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import { getArt, fmt } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { offersAPI } from "@/lib/api";
+import { offersAPI, artAPI } from "@/lib/api";
 import { ArrowLeft, Send } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function OfferPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const targetArtId = searchParams.get("artId");
-  const targetArt = targetArtId ? getArt(targetArtId) : null;
-  const [offerAmount, setOfferAmount] = useState(targetArt ? String(targetArt.price) : "");
+  const [targetArt, setTargetArt] = useState<any | null>(null);
+  const [offerAmount, setOfferAmount] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (targetArtId) {
+      artAPI.getById(targetArtId).then(art => {
+        setTargetArt(art);
+        setOfferAmount(String(art?.price || ""));
+      }).catch(err => {
+        console.error("Failed to fetch artwork:", err);
+        setTargetArt(null);
+      });
+    }
+  }, [targetArtId]);
 
   if (!user) {
     return (

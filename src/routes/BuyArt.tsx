@@ -1,31 +1,36 @@
 import { Link, useNavigate } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import { getAllArtworks, fmt } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
 import { useAuth } from "@/contexts/AuthContext";
-import { holdingsAPI } from "@/lib/api-transactions";
+import { artAPI, holdingsAPI } from "@/lib/api";
 import { ArrowLeft, ShoppingCart } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function BuyArt() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [allArtworks, setAllArtworks] = useState<any[]>([]);
   const [allHoldings, setAllHoldings] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const allArtworks = getAllArtworks();
-
-  // Fetch all holdings from API
+  // Fetch all artworks from API
   useEffect(() => {
-    const fetchAllHoldings = async () => {
+    const fetchData = async () => {
       try {
-        // Fetch all holdings - API should support this or we fetch user holdings and filter
-        // For now, use a generic endpoint that returns all available holdings
-        setAllHoldings([]); // This will be populated by the API
+        const artworks = await artAPI.getAll();
+        const holdings = user?.id ? await holdingsAPI.getByUser(user.id) : [];
+        setAllArtworks(artworks || []);
+        setAllHoldings(holdings || []);
       } catch (error) {
-        console.error("Error fetching holdings:", error);
+        console.error("Error fetching data:", error);
+        setAllArtworks([]);
+        setAllHoldings([]);
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchAllHoldings();
-  }, []);
+    fetchData();
+  }, [user?.id]);
 
   const userHeldArtIds = new Set(
     user ? allHoldings.filter((h) => h.userId === user.id && h.status !== "swapped").map((h) => h.artId) : []

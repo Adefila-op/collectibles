@@ -9,10 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fmt } from "@/lib/art-data";
-import { artAPI, type Art } from "@/lib/api";
+import { artAPI, offersAPI, type Art } from "@/lib/api";
 import { holdingsAPI } from "@/lib/api-transactions";
-import { OFFERS } from "@/lib/offers-data";
-import { ARTWORKS } from "@/lib/art-data";
 import {
   ArrowRight,
   Banknote,
@@ -96,6 +94,7 @@ export default function Explore() {
   >(null);
   const [holdingsVersion, setHoldingsVersion] = useState(0);
   const [allArtworks, setAllArtworks] = useState<Art[]>([]);
+  const [allOffers, setAllOffers] = useState<any[]>([]);
   const [userHoldings, setUserHoldings] = useState<any[]>([]);
   const [isLoadingArtworks, setIsLoadingArtworks] = useState(true);
 
@@ -106,10 +105,14 @@ export default function Explore() {
     const fetchArtworks = async () => {
       try {
         setIsLoadingArtworks(true);
-        const artworks = await artAPI.getAll();
+        const [artworks, offers] = await Promise.all([
+          artAPI.getAll(),
+          offersAPI.getAll()
+        ]);
         setAllArtworks(artworks);
+        setAllOffers(offers);
       } catch (err) {
-        console.error("Failed to fetch artworks:", err);
+        console.error("Failed to fetch artworks or offers:", err);
       } finally {
         setIsLoadingArtworks(false);
       }
@@ -311,6 +314,7 @@ export default function Explore() {
             <DesktopMarketplace
               artworks={filteredArtworks}
               allArtworks={allArtworks}
+              offers={allOffers}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               selectedCategory={selectedCategory}
@@ -686,6 +690,7 @@ function ArtistApplicationGateModal({
 function DesktopMarketplace({
   artworks,
   allArtworks,
+  offers,
   searchQuery,
   onSearchChange,
   selectedCategory,
@@ -716,6 +721,7 @@ function DesktopMarketplace({
 }: {
   artworks: Art[];
   allArtworks: Art[];
+  offers: any[];
   searchQuery: string;
   onSearchChange: (value: string) => void;
   selectedCategory: string | null;
@@ -757,7 +763,7 @@ function DesktopMarketplace({
   const statuses = ["For sale", "Swap only", "Any"];
   const walletAddress = walletAddressForUser(userId);
   const depositNaira = Math.max(0, Math.round((Number(depositAmount) || 0) * NAIRA_PER_USDC));
-  const featured = artworks[0] || ARTWORKS[0];
+  const featured = artworks[0] || allArtworks[0];
   const totalValue = artworks.reduce((sum, art) => sum + art.price, 0);
   const visibleArtworks = artworks;
   const portfolioItems = userHoldings
@@ -964,6 +970,7 @@ function DesktopMarketplace({
               {activeSection === "portfolio" ? (
                 <PortfolioDashboard
                   items={portfolioItems}
+                  offers={offers}
                   walletBalance={walletBalance}
                   onWalletBalanceChange={onWalletBalanceChange}
                   userName={userName}
@@ -1302,6 +1309,7 @@ function DesktopMarketplace({
 
 function PortfolioDashboard({
   items,
+  offers,
   walletBalance,
   onWalletBalanceChange,
   userName,
@@ -1309,6 +1317,7 @@ function PortfolioDashboard({
   onSwapClick,
 }: {
   items: { holding: UserHolding; art: Art }[];
+  offers: any[];
   walletBalance: number;
   onWalletBalanceChange: (balance: number) => void;
   userName: string;
@@ -1324,11 +1333,11 @@ function PortfolioDashboard({
   const artValue = collectionItems.reduce((sum, item) => sum + item.art.price, 0);
   const listedCount = collectionItems.filter((item) => item.holding.status === "listed").length;
   const generalBalance = walletBalance + artValue;
-  const activeOffers = OFFERS.map((offer) => ({
+  const activeOffers = offers.map((offer: any) => ({
     offer,
     match: collectionItems.find((item) => item.art.category === offer.category),
   }))
-    .filter((item): item is { offer: (typeof OFFERS)[number]; match: { holding: UserHolding; art: Art } } => Boolean(item.match))
+    .filter((item: any): item is { offer: any; match: { holding: UserHolding; art: Art } } => Boolean(item.match))
     .slice(0, 4);
   const suggestedArt = collectionItems.map(item => item.art).filter((art) => !heldArtIds.has(art.id)).slice(0, 3);
 

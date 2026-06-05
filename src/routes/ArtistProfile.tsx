@@ -1,8 +1,8 @@
 import { useParams } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { ArtistProfileDesktop } from "@/components/ArtistProfileDesktop";
-import { getAllArtworks, fmt } from "@/lib/art-data";
-import { userAPI } from "@/lib/api";
+import { fmt } from "@/lib/art-data";
+import { userAPI, artAPI } from "@/lib/api";
 import { ArrowLeft, Calendar, ExternalLink, MapPin, Star } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
@@ -66,17 +66,22 @@ const STATIC_ARTISTS: Record<string, {
 export default function ArtistProfile() {
   const { slug } = useParams<{ slug: string }>();
   const [users, setUsers] = useState<any[]>([]);
+  const [allArtworks, setAllArtworks] = useState<any[]>([]);
 
   useEffect(() => {
-    async function fetchUsers() {
+    async function fetchData() {
       try {
-        const fetchedUsers = await userAPI.getAll();
+        const [fetchedUsers, artworks] = await Promise.all([
+          userAPI.getAll(),
+          artAPI.getAll(),
+        ]);
         setUsers(fetchedUsers);
+        setAllArtworks(artworks || []);
       } catch (err) {
-        console.error("Failed to fetch users:", err);
+        console.error("Failed to fetch data:", err);
       }
     }
-    fetchUsers();
+    fetchData();
   }, []);
 
   const approvedUser = users.find((user: any) => slugify(user.name) === slug && user.artistStatus === "approved");
@@ -93,7 +98,7 @@ export default function ArtistProfile() {
       }
     : STATIC_ARTISTS[slug || ""] ?? STATIC_ARTISTS[slugify("Emeka Osei")];
 
-  const portfolio = getAllArtworks().filter((art) => art.artist === profile.name);
+  const portfolio = allArtworks.filter((art) => art.artist === profile.name);
   const totalMarket = portfolio.reduce((sum, art) => sum + art.price, 0);
 
   return (

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAllArtworks, fmt } from "@/lib/art-data";
+import { fmt } from "@/lib/art-data";
 import { holdingsAPI } from "@/lib/api-transactions";
+import { artAPI } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +49,7 @@ export function ProfileModalDesktop({
     null
   );
   const [userHoldings, setUserHoldings] = useState<any>({ owned: 0, listed: 0, swapped: 0, arts: [] });
+  const [allArtworks, setAllArtworks] = useState<any[]>([]);
   const [artistOpen, setArtistOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState("100");
   const [withdrawAmount, setWithdrawAmount] = useState("50");
@@ -64,12 +66,15 @@ export function ProfileModalDesktop({
   });
   const [artistMessage, setArtistMessage] = useState("");
 
-  // Fetch user holdings from API
+  // Fetch user holdings and artworks from API
   useEffect(() => {
-    const fetchHoldings = async () => {
+    const fetchData = async () => {
       if (user?.id && open) {
         try {
-          const holdings = await holdingsAPI.getByUser(user.id);
+          const [holdings, artworks] = await Promise.all([
+            holdingsAPI.getByUser(user.id),
+            artAPI.getAll()
+          ]);
           const stats = {
             owned: holdings.filter((h: any) => h.status === "owned").length,
             listed: holdings.filter((h: any) => h.status === "listed").length,
@@ -77,12 +82,13 @@ export function ProfileModalDesktop({
             arts: holdings,
           };
           setUserHoldings(stats);
+          setAllArtworks(artworks || []);
         } catch (error) {
           console.error("Error fetching holdings:", error);
         }
       }
     };
-    fetchHoldings();
+    fetchData();
   }, [user?.id, open]);
 
   if (!user) {
@@ -104,9 +110,6 @@ export function ProfileModalDesktop({
   // Get user balance
   const balance = user?.walletBalance ?? 0;
   const walletAddress = walletAddressForUser(user.id);
-
-  // Get artworks
-  const allArtworks = getAllArtworks();
 
   // Calculate portfolio balance
   const uniqueOwnedIds = new Set<string>();
