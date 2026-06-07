@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 // Initialize Supabase client
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn('Supabase environment variables not set. Using REST API.');

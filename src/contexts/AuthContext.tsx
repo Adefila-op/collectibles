@@ -8,7 +8,7 @@ import {
 } from "react";
 import { userAPI, supabase, type User } from "@/lib/api";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 // Normalize user data to use camelCase aliases for consistency
 function normalizeUser(user: any): User {
