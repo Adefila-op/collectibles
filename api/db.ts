@@ -95,7 +95,7 @@ export async function query(text: string, params?: any[]) {
 
 function handleMockQuery(text: string, params?: any[]) {
   // Simple mock query handler
-  const result = { rows: [], rowCount: 0 };
+  const result: { rows: any[]; rowCount: number } = { rows: [], rowCount: 0 };
 
   // Handle SELECT NOW()
   if (text.includes('SELECT NOW()')) {
