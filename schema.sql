@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar VARCHAR(50),
   wallet_balance BIGINT DEFAULT 0,
   wallet_address VARCHAR(255),
+  is_admin BOOLEAN DEFAULT false,
   artist_status VARCHAR(50) DEFAULT 'collector',
   artist_type VARCHAR(100),
   artist_bio TEXT,
@@ -114,6 +115,24 @@ CREATE TABLE IF NOT EXISTS admin_events (
   target_art_id UUID REFERENCES artworks(id) ON DELETE SET NULL,
   details JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Artwork Submissions (artist verification flow)
+CREATE TABLE IF NOT EXISTS artwork_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  artist_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  art_id UUID NOT NULL REFERENCES artworks(id) ON DELETE CASCADE,
+  proof_image_url VARCHAR(500),
+  proof_document_url VARCHAR(500),
+  description TEXT,
+  submission_status VARCHAR(50) DEFAULT 'submitted',
+  admin_notes TEXT,
+  reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMP,
+  nft_transaction_hash VARCHAR(255),
+  nft_token_id VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Certificates Table (for artwork provenance)

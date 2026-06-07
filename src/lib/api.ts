@@ -3,9 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 // Initialize Supabase client
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
+  console.warn('Supabase environment variables not set. Using REST API.');
 }
 
 export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY 
@@ -15,9 +16,26 @@ export const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
 // Helper to ensure supabase is initialized
 function getSupabase() {
   if (!supabase) {
-    throw new Error('Supabase configuration missing. Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.');
+    throw new Error('Supabase configuration missing. Using REST API fallback.');
   }
   return supabase;
+}
+
+// REST API helper
+async function fetchAPI(endpoint: string, options: any = {}) {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  });
+  
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+  
+  return response.json();
 }
 
 // Add property aliases for backward compatibility
@@ -27,6 +45,7 @@ function addUserAliases(user: any): any {
     ...user,
     walletBalance: user.wallet_balance,
     walletAddress: user.wallet_address,
+    isAdmin: user.is_admin,
     artistStatus: user.artist_status,
     createdAt: user.created_at,
   };
@@ -56,6 +75,7 @@ export interface User {
   avatar: string;
   wallet_balance: number;
   wallet_address?: string;
+  is_admin?: boolean;
   artist_status: 'collector' | 'pending' | 'approved';
   artist_type?: string;
   artist_bio?: string;
@@ -68,6 +88,7 @@ export interface User {
   // Aliases for backward compatibility
   walletBalance?: number;
   walletAddress?: string;
+  isAdmin?: boolean;
   artistStatus?: 'collector' | 'pending' | 'approved';
   createdAt?: string;
 }
@@ -151,16 +172,29 @@ export interface Certificate {
 // User API
 export const userAPI = {
   getAll: async () => {
+    if (!supabase) {
+      const users = await fetchAPI('/api/users');
+      return (Array.isArray(users) ? users : []).map(addUserAliases);
+    }
     const { data, error } = await getSupabase().from('users').select('*');
     if (error) throw error;
     return (data || []).map(addUserAliases);
   },
   getById: async (id: string) => {
+    if (!supabase) {
+      return addUserAliases(await fetchAPI(`/api/users/${id}`));
+    }
     const { data, error } = await getSupabase().from('users').select('*').eq('id', id).single();
     if (error) throw error;
     return addUserAliases(data);
   },
   create: async (user: Partial<User> & { password: string }) => {
+    if (!supabase) {
+      return addUserAliases(await fetchAPI('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(user),
+      }));
+    }
     // Sign up user with Supabase Auth
     const { data: authData, error: authError } = await getSupabase().auth.signUp({
       email: user.email || '',
@@ -181,6 +215,12 @@ export const userAPI = {
     return addUserAliases(data);
   },
   updateWallet: async (userId: string, amount: number) => {
+    if (!supabase) {
+      return addUserAliases(await fetchAPI(`/api/users/${userId}/wallet`, {
+        method: 'PATCH',
+        body: JSON.stringify({ amount }),
+      }));
+    }
     const { data, error } = await getSupabase().from('users')
       .update({ wallet_balance: amount })
       .eq('id', userId)
@@ -190,16 +230,46 @@ export const userAPI = {
     return addUserAliases(data);
   },
   updateArtistStatus: async (userId: string, data: any) => {
+    // Handle both string status and object
+    const statusData = typeof data === 'string' ? { artist_status: data } : {
+      artist_status: data.artist_status ?? data.status,
+      artist_type: data.artist_type ?? data.artistType,
+      artist_bio: data.artist_bio ?? data.artistBio,
+      portfolio_url: data.portfolio_url ?? data.portfolioUrl,
+      social_url: data.social_url ?? data.socialUrl,
+      live_location: data.live_location ?? data.liveLocation,
+      call_url: data.call_url ?? data.callUrl,
+    };
+    
+    if (!supabase) {
+      return addUserAliases(await fetchAPI(`/api/users/${userId}/artist-status`, {
+        method: 'PATCH',
+        body: JSON.stringify(statusData),
+      }));
+    }
+
+    // For admin operations, use REST API
+    const userId_current = localStorage.getItem('artchain_user_id');
+    if (typeof data === 'string') {
+      // Admin approval/rejection - use REST API
+      const response = await fetch(`/api/users/${userId}/artist-status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId_current || '',
+        },
+        body: JSON.stringify(statusData),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update artist status');
+      }
+      return addUserAliases(await response.json());
+    }
+    
+    // For user self-updates, use Supabase
     const { data: updatedUser, error } = await getSupabase().from('users')
-      .update({
-        artist_status: data.artist_status,
-        artist_type: data.artist_type,
-        artist_bio: data.artist_bio,
-        portfolio_url: data.portfolio_url,
-        social_url: data.social_url,
-        live_location: data.live_location,
-        call_url: data.call_url,
-      })
+      .update(statusData)
       .eq('id', userId)
       .select()
       .single();
@@ -211,28 +281,60 @@ export const userAPI = {
 // Artwork API
 export const artAPI = {
   getAll: async () => {
-    const { data, error } = await getSupabase().from('artworks').select('*');
-    if (error) throw error;
-    return (data || []).map(addArtAliases);
+    try {
+      // Try REST API first
+      const response = await fetchAPI('/api/artworks');
+      // Ensure we return an array
+      const data = Array.isArray(response) ? response : (response?.rows || response?.data || []);
+      return data.map((art: any) => addArtAliases(art));
+    } catch (error) {
+      console.warn('REST API failed, trying Supabase:', error);
+      try {
+        // Fallback to Supabase
+        const { data, error: supabaseError } = await getSupabase().from('artworks').select('*');
+        if (supabaseError) throw supabaseError;
+        return (data || []).map(addArtAliases);
+      } catch (supabaseErr) {
+        console.error('Both API and Supabase failed:', supabaseErr);
+        return []; // Return empty array if both fail
+      }
+    }
   },
   getById: async (id: string) => {
-    const { data, error } = await getSupabase().from('artworks').select('*').eq('id', id).single();
-    if (error) throw error;
-    return addArtAliases(data);
+    try {
+      const response = await fetchAPI(`/api/artworks/${id}`);
+      return addArtAliases(response);
+    } catch (error) {
+      const { data, error: supabaseError } = await getSupabase().from('artworks').select('*').eq('id', id).single();
+      if (supabaseError) throw supabaseError;
+      return addArtAliases(data);
+    }
   },
   create: async (artwork: any) => {
-    const { data, error } = await getSupabase().from('artworks')
-      .insert(artwork)
-      .select()
-      .single();
-    if (error) throw error;
-    return addArtAliases(data);
+    try {
+      const response = await fetchAPI('/api/artworks', {
+        method: 'POST',
+        body: JSON.stringify(artwork),
+      });
+      return addArtAliases(response);
+    } catch (error) {
+      const { data, error: supabaseError } = await getSupabase().from('artworks')
+        .insert(artwork)
+        .select()
+        .single();
+      if (supabaseError) throw supabaseError;
+      return addArtAliases(data);
+    }
   },
 };
 
 // Holdings API
 export const holdingsAPI = {
   getByUserId: async (userId: string) => {
+    if (!supabase) {
+      const holdings = await fetchAPI(`/api/holdings/${userId}`);
+      return (Array.isArray(holdings) ? holdings : []).map(addArtAliases);
+    }
     const { data, error } = await getSupabase().from('holdings')
       .select('*')
       .eq('user_id', userId);
@@ -240,6 +342,10 @@ export const holdingsAPI = {
     return (data || []).map(addArtAliases);
   },
   getByUser: async (userId: string) => {
+    if (!supabase) {
+      const holdings = await fetchAPI(`/api/holdings/${userId}`);
+      return (Array.isArray(holdings) ? holdings : []).map(addArtAliases);
+    }
     const { data, error } = await getSupabase().from('holdings')
       .select('*')
       .eq('user_id', userId);
@@ -247,6 +353,16 @@ export const holdingsAPI = {
     return (data || []).map(addArtAliases);
   },
   create: async (holding: any) => {
+    if (!supabase) {
+      return addArtAliases(await fetchAPI('/api/holdings', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: holding.userId ?? holding.user_id,
+          artId: holding.artId ?? holding.art_id,
+          status: holding.status,
+        }),
+      }));
+    }
     const { data, error } = await getSupabase().from('holdings')
       .insert(holding)
       .select()
@@ -255,6 +371,16 @@ export const holdingsAPI = {
     return addArtAliases(data);
   },
   update: async (holdingId: string, userId: string, updateData: any) => {
+    if (!supabase) {
+      return addArtAliases(await fetchAPI(`/api/holdings/${holdingId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          userId,
+          status: updateData.status,
+          listedPrice: updateData.listedPrice ?? updateData.listed_price,
+        }),
+      }));
+    }
     const { data, error } = await getSupabase().from('holdings')
       .update(updateData)
       .eq('id', holdingId)
@@ -397,22 +523,36 @@ export const submissionAPI = {
     return data || [];
   },
   approve: async (submissionId: string) => {
-    const { data, error } = await getSupabase().from('artwork_submissions')
-      .update({ submission_status: 'approved' })
-      .eq('id', submissionId)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const userId = localStorage.getItem('artchain_user_id');
+    const response = await fetch(`/api/artwork-submissions/${submissionId}/approve`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': userId || '',
+      },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to approve submission');
+    }
+    return await response.json();
   },
-  reject: async (submissionId: string) => {
-    const { data, error } = await getSupabase().from('artwork_submissions')
-      .update({ submission_status: 'rejected' })
-      .eq('id', submissionId)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+  reject: async (submissionId: string, adminNotes?: string) => {
+    const userId = localStorage.getItem('artchain_user_id');
+    const response = await fetch(`/api/artwork-submissions/${submissionId}/reject`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': userId || '',
+      },
+      body: JSON.stringify({ adminNotes }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to reject submission');
+    }
+    return await response.json();
   },
 };
 

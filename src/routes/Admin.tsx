@@ -1,24 +1,25 @@
 import { useMemo, useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { AppFrame } from "@/components/AppFrame";
 import { userAPI, submissionAPI } from "@/lib/api";
 import { Check, ExternalLink, ShieldCheck, X } from "lucide-react";
 import type { User, ArtworkSubmission } from "@/lib/api";
 
-const ADMIN_CODE = "COLLECTIBLE-ADMIN";
-
 export default function Admin() {
-  const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem("artchain_admin") === "true");
-  const [code, setCode] = useState("");
+  const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [submissions, setSubmissions] = useState<ArtworkSubmission[]>([]);
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"artists" | "artworks">("artists");
 
-  // Fetch data on component mount or when unlocked
+  // Check if user is admin
+  const isAdmin = user?.is_admin || user?.isAdmin || false;
+
+  // Fetch data on component mount if user is admin
   useEffect(() => {
     const fetchData = async () => {
-      if (isUnlocked) {
+      if (isAdmin) {
         try {
           setIsLoading(true);
           const [fetchedUsers, fetchedSubmissions] = await Promise.all([
@@ -33,24 +34,16 @@ export default function Admin() {
         } finally {
           setIsLoading(false);
         }
+      } else {
+        setIsLoading(false);
       }
     };
     fetchData();
-  }, [isUnlocked]);
+  }, [isAdmin]);
 
   const pending = useMemo(() => users.filter((user) => user.artistStatus === "pending"), [users]);
   const approved = useMemo(() => users.filter((user) => user.artistStatus === "approved"), [users]);
   const pendingSubmissions = useMemo(() => submissions.filter((s) => s.submission_status === "submitted"), [submissions]);
-
-  async function unlock() {
-    if (code.trim() !== ADMIN_CODE) {
-      setMessage("Invalid admin code.");
-      return;
-    }
-    localStorage.setItem("artchain_admin", "true");
-    setIsUnlocked(true);
-    setMessage("");
-  }
 
   async function decide(userId: string, status: "collector" | "approved") {
     try {
@@ -85,31 +78,19 @@ export default function Admin() {
     }
   }
 
-  if (!isUnlocked) {
+  if (!isAdmin) {
     return (
       <AppFrame label="Admin">
         <div className="px-5 pt-6 pb-6">
           <div className="rounded-3xl bg-card p-5 shadow-card">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-destructive/10 text-destructive">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <h1 className="mt-4 text-center font-display text-xl font-semibold">Admin review</h1>
+            <h1 className="mt-4 text-center font-display text-xl font-semibold">Access Denied</h1>
             <p className="mt-2 text-center text-sm text-muted-foreground">
-              Enter the admin code to review artist applications and artwork verifications.
+              You do not have administrator permissions. Only admins can access this panel.
             </p>
-            <input
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              placeholder="Admin code"
-              className="mt-5 w-full rounded-2xl bg-muted px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            {message && <div className="mt-3 text-center text-xs font-semibold text-primary">{message}</div>}
-            <button
-              onClick={unlock}
-              className="mt-4 w-full rounded-2xl bg-primary py-3 text-sm font-semibold text-white shadow-glow"
-            >
-              Unlock admin
-            </button>
+            {message && <div className="mt-3 text-center text-xs font-semibold text-destructive">{message}</div>}
           </div>
         </div>
       </AppFrame>

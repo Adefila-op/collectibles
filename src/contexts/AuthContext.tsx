@@ -8,6 +8,8 @@ import {
 } from "react";
 import { userAPI, supabase, type User } from "@/lib/api";
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
 // Normalize user data to use camelCase aliases for consistency
 function normalizeUser(user: any): User {
   if (!user) return user;
@@ -15,6 +17,7 @@ function normalizeUser(user: any): User {
     ...user,
     walletBalance: user.wallet_balance ?? user.walletBalance,
     walletAddress: user.wallet_address ?? user.walletAddress,
+    isAdmin: user.is_admin ?? user.isAdmin ?? false,
     artistStatus: user.artist_status ?? user.artistStatus ?? "collector",
     createdAt: user.created_at ?? user.createdAt,
   };
@@ -79,7 +82,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       try {
         if (!supabase) {
-          return { ok: false, error: "Supabase configuration is missing. Please ensure environment variables are set." };
+          const response = await fetch(`${API_BASE}/api/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            return { ok: false, error: data.error || "Login failed" };
+          }
+          const normalizedUser = normalizeUser(data);
+          localStorage.setItem("artchain_user_id", normalizedUser.id);
+          setUser(normalizedUser);
+          return { ok: true };
         }
         // Sign in with Supabase Auth
         const { data: authData, error: authError } = await supabase?.auth.signInWithPassword({

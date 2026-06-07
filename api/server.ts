@@ -24,9 +24,43 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Authentication middleware - extracts user ID from headers
+app.use((req: any, res: any, next: any) => {
+  const userId = req.headers['x-user-id'];
+  if (userId) {
+    req.userId = userId;
+  }
+  next();
+});
+
+// Admin verification middleware
+async function requireAdmin(req: any, res: any, next: any) {
+  try {
+    const userId = req.userId || req.body?.adminId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: No user ID provided' });
+    }
+    
+    const result = await query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+    if (result.rows.length === 0 || !result.rows[0].is_admin) {
+      return res.status(403).json({ error: 'Forbidden: Admin access required' });
+    }
+    
+    req.isAdmin = true;
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'Authorization check failed' });
+  }
+}
+
 
 async function ensureRuntimeSchema() {
   try {
+    await query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false
+    `);
+    
     await query(`
       ALTER TABLE holdings
         ADD COLUMN IF NOT EXISTS listed_price BIGINT,
@@ -131,6 +165,31 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   }
 });
 
+// Admin promotion endpoint (requires admin)
+app.post('/api/admin/promote', requireAdmin, async (req: Request, res: Response) => {
+  const { targetUserId } = req.body;
+  try {
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'Target user ID required' });
+    }
+    
+    const result = await query(
+      `UPDATE users SET is_admin = true, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 RETURNING id, email, is_admin`,
+      [targetUserId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ message: 'User promoted to admin', user: result.rows[0] });
+  } catch (error: any) {
+    console.error('Admin promotion error:', error);
+    res.status(500).json({ error: 'Failed to promote user' });
+  }
+});
+
 // Update user wallet balance
 app.patch('/api/users/:id/wallet', async (req: Request, res: Response) => {
   const { amount } = req.body;
@@ -151,14 +210,39 @@ app.patch('/api/users/:id/wallet', async (req: Request, res: Response) => {
 
 // Update artist status
 app.patch('/api/users/:id/artist-status', async (req: Request, res: Response) => {
-  const { status, artistType, artistBio, portfolioUrl, socialUrl, liveLocation, callUrl } = req.body;
+  const {
+    status,
+    artist_status,
+    artistType,
+    artist_type,
+    artistBio,
+    artist_bio,
+    portfolioUrl,
+    portfolio_url,
+    socialUrl,
+    social_url,
+    liveLocation,
+    live_location,
+    callUrl,
+    call_url,
+  } = req.body;
+  const nextStatus = status || artist_status;
   try {
     const result = await query(
       `UPDATE users 
        SET artist_status = $1, artist_type = $2, artist_bio = $3, portfolio_url = $4, 
            social_url = $5, live_location = $6, call_url = $7, updated_at = CURRENT_TIMESTAMP
        WHERE id = $8 RETURNING *`,
-      [status, artistType, artistBio, portfolioUrl, socialUrl, liveLocation, callUrl, req.params.id]
+      [
+        nextStatus,
+        artistType || artist_type,
+        artistBio || artist_bio,
+        portfolioUrl || portfolio_url,
+        socialUrl || social_url,
+        liveLocation || live_location,
+        callUrl || call_url,
+        req.params.id,
+      ]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -373,7 +457,7 @@ app.get('/api/artwork-submissions/art/:artId', async (req: Request, res: Respons
 });
 
 // Admin review/approve artwork submission (generates on-chain certificate)
-app.patch('/api/artwork-submissions/:submissionId/approve', async (req: Request, res: Response) => {
+app.patch('/api/artwork-submissions/:submissionId/approve', requireAdmin, async (req: Request, res: Response) => {
   const client = await getClient();
   try {
     const { submissionId } = req.params;
@@ -485,10 +569,11 @@ app.patch('/api/artwork-submissions/:submissionId/approve', async (req: Request,
 });
 
 // Admin reject artwork submission
-app.patch('/api/artwork-submissions/:submissionId/reject', async (req: Request, res: Response) => {
+app.patch('/api/artwork-submissions/:submissionId/reject', requireAdmin, async (req: Request, res: Response) => {
   try {
     const { submissionId } = req.params;
-    const { adminId, adminNotes } = req.body;
+    const adminId = (req as any).userId || req.body?.adminId;
+    const { adminNotes } = req.body;
 
     if (!adminId) {
       return res.status(400).json({ error: 'adminId required' });
@@ -630,9 +715,14 @@ app.get('/api/offers/art/:artId', async (req: Request, res: Response) => {
 app.post('/api/offers', async (req: Request, res: Response) => {
   const client = await getClient();
   try {
-    const { buyerId, artId, amount } = req.body;
+    const buyerId = req.userId || req.body?.buyerId;
+    const { artId, amount } = req.body;
     
-    if (!buyerId || !artId || !amount || amount <= 0) {
+    if (!buyerId) {
+      return res.status(401).json({ error: 'Unauthorized: User ID required' });
+    }
+    
+    if (!artId || !amount || amount <= 0) {
       return res.status(400).json({ error: 'Missing or invalid offer fields' });
     }
 
@@ -955,9 +1045,14 @@ app.patch('/api/offers/:offerId/reject', async (req: Request, res: Response) => 
 app.post('/api/buy', async (req: Request, res: Response) => {
   const client = await getClient();
   try {
-    const { buyerId, artId, amount, sellerId } = req.body;
+    const buyerId = req.userId || req.body?.buyerId;
+    const { artId, amount, sellerId } = req.body;
     
-    if (!buyerId || !artId || !amount || !sellerId || amount <= 0) {
+    if (!buyerId) {
+      return res.status(401).json({ error: 'Unauthorized: User ID required' });
+    }
+    
+    if (!artId || !amount || !sellerId || amount <= 0) {
       return res.status(400).json({ error: 'Missing or invalid purchase fields' });
     }
 
@@ -1124,9 +1219,14 @@ app.post('/api/buy', async (req: Request, res: Response) => {
 app.post('/api/swap', async (req: Request, res: Response) => {
   const client = await getClient();
   try {
-    const { userId1, userId2, artId1, artId2, cashAmount } = req.body;
+    const userId1 = req.userId || req.body?.userId1;
+    const { userId2, artId1, artId2, cashAmount } = req.body;
     
-    if (!userId1 || !userId2 || !artId1 || !artId2 || cashAmount < 0) {
+    if (!userId1) {
+      return res.status(401).json({ error: 'Unauthorized: User ID required' });
+    }
+    
+    if (!userId2 || !artId1 || !artId2 || cashAmount < 0) {
       return res.status(400).json({ error: 'Missing or invalid swap fields' });
     }
 
@@ -1461,10 +1561,15 @@ app.get('/api/certificates/user/:userId', async (req: Request, res: Response) =>
 app.post('/api/withdrawals', async (req: Request, res: Response) => {
   const client = await getClient();
   try {
-    const { userId, amount, recipientAddress, artId } = req.body;
+    const userId = req.userId || req.body?.userId;
+    const { amount, recipientAddress, artId } = req.body;
     
-    if (!userId || !amount || amount <= 0) {
-      return res.status(400).json({ error: 'Missing or invalid user ID or amount' });
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: User ID required' });
+    }
+    
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
     }
 
     if (!recipientAddress || !/^0x[a-fA-F0-9]{40}$/.test(recipientAddress.trim())) {
@@ -1715,8 +1820,8 @@ app.patch('/api/escrow/:id/release', async (req: Request, res: Response) => {
 
 // ========== Admin API ==========
 
-// Get admin events
-app.get('/api/admin/events', async (req: Request, res: Response) => {
+// Get admin events (admin only)
+app.get('/api/admin/events', requireAdmin, async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit || 50;
     const result = await query(
@@ -1729,15 +1834,15 @@ app.get('/api/admin/events', async (req: Request, res: Response) => {
   }
 });
 
-// Log admin event
-app.post('/api/admin/events', async (req: Request, res: Response) => {
-  const { action, adminId, targetUserId, targetArtId, details } = req.body;
+// Log admin event (admin only)
+app.post('/api/admin/events', requireAdmin, async (req: Request, res: Response) => {
+  const { action, targetUserId, targetArtId, details } = req.body;
   try {
     const result = await query(
       `INSERT INTO admin_events (action, admin_id, target_user_id, target_art_id, details)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [action, adminId, targetUserId, targetArtId, JSON.stringify(details)]
+      [action, req.userId, targetUserId, targetArtId, JSON.stringify(details)]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -1819,8 +1924,13 @@ app.get('/api/wallet/gas-fee/:chain', async (req: Request, res: Response) => {
 
 // Create a top-up deposit request
 app.post('/api/wallet/topup', async (req: Request, res: Response) => {
-  const { userId, amount, chain, paymentMethod } = req.body;
+  const userId = req.userId || req.body?.userId;
+  const { amount, chain, paymentMethod } = req.body;
   try {
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: User ID required' });
+    }
+    
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Invalid amount' });
     }
@@ -2000,9 +2110,6 @@ async function startServer() {
     console.error('Please ensure DATABASE_URL is set in .env.local');
     process.exit(1);
   }
-}
-    console.log(`📊 Database: ${dbStatus}`);
-  });
 }
 
 startServer().catch(console.error);
