@@ -424,7 +424,7 @@ export default function Profile() {
       </AppFrame>
 
       <Dialog open={walletMode !== null} onOpenChange={(open) => !open && setWalletMode(null)}>
-        <DialogContent className="max-w-[390px] rounded-3xl border-0 p-0 overflow-hidden">
+        <DialogContent className="max-h-[calc(100dvh_-_2rem)] max-w-[390px] overflow-y-auto rounded-3xl border-0 p-0">
           <div className="bg-[hsl(var(--ink))] p-5 text-white">
             <DialogHeader>
               <DialogTitle className="text-left text-xl">
@@ -520,7 +520,7 @@ export default function Profile() {
       </Dialog>
 
       <Dialog open={artistOpen} onOpenChange={setArtistOpen}>
-        <DialogContent className="max-w-[390px] rounded-3xl border-0 p-0 overflow-hidden">
+        <DialogContent className="max-h-[calc(100dvh_-_2rem)] max-w-[390px] overflow-y-auto rounded-3xl border-0 p-0">
           <div className="bg-primary-grad p-5 text-white">
             <DialogHeader>
               <DialogTitle className="text-left text-xl">Apply as artist</DialogTitle>
@@ -533,7 +533,7 @@ export default function Profile() {
             </div>
           </div>
 
-          <div className="max-h-[68vh] space-y-3 overflow-y-auto p-5">
+          <div className="space-y-3 p-5">
             <div>
               <label className="text-xs font-semibold text-muted-foreground">Type of artist</label>
               <select

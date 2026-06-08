@@ -330,17 +330,6 @@ export const artAPI = {
 
 // Holdings API
 export const holdingsAPI = {
-  getByUserId: async (userId: string) => {
-    if (!supabase) {
-      const holdings = await fetchAPI(`/api/holdings/${userId}`);
-      return (Array.isArray(holdings) ? holdings : []).map(addArtAliases);
-    }
-    const { data, error } = await getSupabase().from('holdings')
-      .select('*')
-      .eq('user_id', userId);
-    if (error) throw error;
-    return (data || []).map(addArtAliases);
-  },
   getByUser: async (userId: string) => {
     if (!supabase) {
       const holdings = await fetchAPI(`/api/holdings/${userId}`);
@@ -352,6 +341,8 @@ export const holdingsAPI = {
     if (error) throw error;
     return (data || []).map(addArtAliases);
   },
+  // Backward compatibility alias
+  getByUserId: async (userId: string) => holdingsAPI.getByUser(userId),
   create: async (holding: any) => {
     if (!supabase) {
       return addArtAliases(await fetchAPI('/api/holdings', {
@@ -477,13 +468,15 @@ export const transactionsAPI = {
     if (error) throw error;
     return data || [];
   },
-  getByUserId: async (userId: string) => {
+  getByUser: async (userId: string) => {
     const { data, error } = await getSupabase().from('transactions')
       .select('*')
       .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`);
     if (error) throw error;
     return data || [];
   },
+  // Backward compatibility alias
+  getByUserId: async (userId: string) => transactionsAPI.getByUser(userId),
 };
 
 // Purchase API

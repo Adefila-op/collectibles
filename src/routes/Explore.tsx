@@ -994,13 +994,23 @@ function DesktopMarketplace({
                       Browse verified works with unique IDs, certificates, ownership records, exhibition history, restoration notes, and valuation signals.
                     </p>
                   </div>
-                  <img
-                    src={featured.image}
-                    alt={featured.name}
-                    loading="eager"
-                    decoding="async"
-                    className="h-72 w-full rounded-[24px] object-cover shadow-2xl"
-                  />
+                  {featured ? (
+                    <img
+                      src={featured.image}
+                      alt={featured.name}
+                      loading="eager"
+                      decoding="async"
+                      className="h-72 w-full rounded-[24px] object-cover shadow-2xl"
+                    />
+                  ) : (
+                    <div className="grid h-72 w-full place-items-center rounded-[24px] border border-white/70 bg-white/55 text-center shadow-2xl">
+                      <div>
+                        <ShieldCheck className="mx-auto h-8 w-8 text-primary" />
+                        <div className="mt-3 text-sm font-semibold text-slate-700">Loading verified artwork</div>
+                        <div className="mt-1 text-xs text-slate-500">Marketplace inventory will appear here.</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

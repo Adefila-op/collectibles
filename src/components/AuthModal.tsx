@@ -67,11 +67,11 @@ export function AuthModal({ open, defaultTab = "signin", onClose }: AuthModalPro
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/60 px-4 py-[calc(1rem_+_env(safe-area-inset-top))] backdrop-blur-sm sm:items-center"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       {/* Modal card */}
-      <div className="relative w-full max-w-sm rounded-3xl bg-card shadow-2xl overflow-hidden animate-[pop_0.3s_both]">
+      <div className="relative my-auto max-h-[calc(100dvh_-_2rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-sm overflow-y-auto rounded-3xl bg-card shadow-2xl animate-[pop_0.3s_both]">
         {/* Gradient top strip */}
         <div className="h-1.5 bg-primary-grad" />
 

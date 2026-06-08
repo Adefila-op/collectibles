@@ -4,7 +4,7 @@ import { BottomNav } from "./BottomNav";
 import { BrandLogo } from "./BrandLogo";
 import heroCharacter from "@/assets/hero-character.png";
 import { Instagram, Menu, ShieldCheck, Twitter } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BuyArtModalDesktop } from "./modals/BuyArtModalDesktop";
 import { OfferModalDesktop } from "./modals/OfferModalDesktop";
 import { SwapModalDesktop } from "./modals/SwapModalDesktop";
@@ -20,26 +20,42 @@ export function AppFrame({
   label?: string;
   desktop?: ReactNode;
 }) {
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia("(min-width: 1024px)").matches
+  );
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [buyModalOpen, setBuyModalOpen] = useState(false);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [listingModalOpen, setListingModalOpen] = useState(false);
   const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const handleChange = () => setIsDesktopViewport(query.matches);
+
+    handleChange();
+    query.addEventListener("change", handleChange);
+
+    return () => query.removeEventListener("change", handleChange);
+  }, []);
+
   if (desktop) {
     return (
       <div className="min-h-screen bg-background text-foreground lg:bg-[#0759e8]">
         {/* Mobile view */}
-        <div className="lg:hidden">
-          <PhoneShell label={label}>
-            <div className="flex min-h-dvh flex-col">
-              <main className="flex-1">{children}</main>
-              <BottomNav />
-            </div>
-          </PhoneShell>
-        </div>
+        {!isDesktopViewport && (
+          <div>
+            <PhoneShell label={label}>
+              <div className="flex min-h-dvh flex-col">
+                <main className="flex-1">{children}</main>
+                <BottomNav />
+              </div>
+            </PhoneShell>
+          </div>
+        )}
         {/* Desktop view - custom layout */}
-        <div className="hidden min-h-screen lg:block">{desktop}</div>
+        {isDesktopViewport && <div className="min-h-screen">{desktop}</div>}
       </div>
     );
   }
