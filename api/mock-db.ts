@@ -185,55 +185,8 @@ class MockDatabase {
   }
 
   async seedDemoData(): Promise<void> {
-    // Create demo artworks
-    const demoArtworks = [
-      {
-        name: 'Harmattan Haze',
-        artist: 'Adekunle Olayinka',
-        city: 'Lagos',
-        year: 2023,
-        category: 'Painting',
-        price: 480000,
-        image: 'https://images.unsplash.com/photo-1578987184166-12fe0a9bf3c4?w=400&h=400&fit=crop',
-        current_owner_id: 'demo-artist-1',
-      },
-      {
-        name: 'Urban Dreams',
-        artist: 'Chioma Uwandu',
-        city: 'Lagos',
-        year: 2024,
-        category: 'Sculpture',
-        price: 320000,
-        image: 'https://images.unsplash.com/photo-1578987184166-12fe0a9bf3c4?w=400&h=400&fit=crop',
-        current_owner_id: 'demo-artist-2',
-      },
-      {
-        name: 'Kente Dreams',
-        artist: 'Yaw Mensah',
-        city: 'Accra',
-        year: 2023,
-        category: 'Textile',
-        price: 250000,
-        image: 'https://images.unsplash.com/photo-1578987184166-12fe0a9bf3c4?w=400&h=400&fit=crop',
-        current_owner_id: 'demo-artist-3',
-      },
-      {
-        name: 'Ancient Stories',
-        artist: 'Fatima Ba',
-        city: 'Dakar',
-        year: 2023,
-        category: 'Beadwork',
-        price: 180000,
-        image: 'https://images.unsplash.com/photo-1578987184166-12fe0a9bf3c4?w=400&h=400&fit=crop',
-        current_owner_id: 'demo-artist-4',
-      },
-    ];
-
-    for (const artwork of demoArtworks) {
-      await this.createArtwork(artwork);
-    }
-
-    console.log('✅ Demo data seeded');
+    // Demo data seeding removed - use real API to populate portfolio data
+    console.log('✅ No demo data to seed');
   }
 }
 

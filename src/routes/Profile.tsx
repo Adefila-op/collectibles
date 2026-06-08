@@ -44,11 +44,11 @@ export default function Profile() {
   const [network, setNetwork] = useState<(typeof NETWORKS)[number]>("Base");
   const [walletMessage, setWalletMessage] = useState("");
   const [artistForm, setArtistForm] = useState({
-    artistType: "Painter",
+    artistType: "",
     artistBio: "",
     portfolioUrl: "",
     socialUrl: "",
-    liveLocation: "Lagos, Nigeria",
+    liveLocation: "",
     callUrl: "",
   });
   const [artistMessage, setArtistMessage] = useState("");

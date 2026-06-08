@@ -391,19 +391,7 @@ export function updateHoldingStatus(
   return holding;
 }
 
-// Initialize demo holdings for a user (called on first portfolio view)
-export function initializeDemoHoldingsIfNeeded(userId: string): void {
-  const existing = getHoldings(userId);
-  if (existing.length > 0) return; // Already has holdings
 
-  // Add sample holdings for portfolio display
-  const artIds = ["harmattan", "lagoon", "bronze"];
-  const statuses: UserHolding["status"][] = ["owned", "owned", "listed"];
-  
-  artIds.forEach((artId, index) => {
-    addHolding(userId, artId, statuses[index]);
-  });
-}
 
 // ── Offers ───────────────────────────────────────────────────────────────────
 

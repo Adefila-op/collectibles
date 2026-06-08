@@ -32,45 +32,8 @@ try {
 
 // Mock in-memory database for development
 const mockData: Record<string, any[]> = {
-  users: [
-    {
-      id: 'admin-001',
-      email: 'admin@collectibles.local',
-      name: 'Admin User',
-      password_hash: '$2b$10$N9qo8uLOickgx2ZMRZoMye.0IEe48yL8nxM6zTgvyLEGVkqKt5Yti', // password123
-      wallet_balance: 5000000,
-      wallet_address: '0xadmin001',
-      artist_status: 'approved',
-      is_admin: true,
-      created_at: new Date().toISOString(),
-    },
-  ],
-  artworks: [
-    {
-      id: 'art-001',
-      name: 'Harmattan Haze',
-      artist: 'Adekunle Olayinka',
-      city: 'Lagos',
-      year: 2023,
-      category: 'Painting',
-      price: 480000,
-      image: 'https://images.unsplash.com/photo-1578987184166-12fe0a9bf3c4?w=400&h=400&fit=crop',
-      current_owner_id: 'admin-001',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'art-002',
-      name: 'Sunset Over Lagos',
-      artist: 'Yetunde Abiola',
-      city: 'Abuja',
-      year: 2024,
-      category: 'Photography',
-      price: 250000,
-      image: 'https://images.unsplash.com/photo-1579783902614-e3fb5141b0cb?w=400&h=400&fit=crop',
-      current_owner_id: 'admin-001',
-      created_at: new Date().toISOString(),
-    },
-  ],
+  users: [],
+  artworks: [],
   holdings: [],
   transactions: [],
   offers: [],
