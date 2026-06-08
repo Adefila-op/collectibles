@@ -842,7 +842,7 @@ function DesktopMarketplace({
     <div className="min-h-screen bg-[#f6f8ff] text-slate-950">
       <div className="grid min-h-screen grid-cols-[260px_minmax(0,1fr)]">
         <aside className="sticky top-0 flex h-screen flex-col border-r border-slate-200/80 bg-white/90 px-6 py-8 backdrop-blur">
-          <BrandLogo />
+          <BrandLogo bgColor="bg-white" />
           <nav className="mt-10 space-y-1 text-sm">
             {[
               { label: "Home", icon: HomeIcon, to: "/" },

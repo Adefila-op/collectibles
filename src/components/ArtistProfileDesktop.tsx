@@ -75,7 +75,7 @@ const STATIC_ARTISTS: Record<string, {
 function DesktopSidebar() {
   return (
     <aside className="sticky top-0 flex h-screen flex-col border-r border-slate-200/80 bg-white/90 px-6 py-8 backdrop-blur">
-      <BrandLogo />
+      <BrandLogo bgColor="bg-white" />
       <nav className="mt-10 space-y-1 text-sm">
         {[
           { label: "Home", icon: HomeIcon, to: "/" },

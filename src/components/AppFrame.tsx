@@ -82,7 +82,7 @@ export function AppFrame({
           </div>
 
           <div className="relative z-10 space-y-4">
-            <BrandLogo light markClassName="h-10 w-10" textClassName="font-display text-xl font-black" />
+            <BrandLogo light markClassName="h-10 w-10" textClassName="font-display text-xl font-black" bgColor="bg-white/10" />
             <div className="relative flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 text-white/85">
                 <Instagram className="h-4 w-4" />
