@@ -4,7 +4,10 @@
   "installCommand": "npm install",
   "framework": "vite",
   "functions": {
-    "api/**/*.ts": {
+    "api/server.ts": {
+      "runtime": "@vercel/node@5.8.8"
+    },
+    "api/[...path].ts": {
       "runtime": "@vercel/node@5.8.8"
     }
   },
