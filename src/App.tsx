@@ -12,6 +12,7 @@ import BuyArt from "@/routes/BuyArt";
 import ArtistProfile from "@/routes/ArtistProfile";
 import Admin from "@/routes/Admin";
 import AdminDashboard from "@/routes/AdminDashboard";
+import SolanaCollectionDetail from "@/routes/SolanaCollectionDetail";
 
 function NotFound() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/dipo" element={<AdminDashboard />} />
+          <Route path="/solana-collection/:collection" element={<SolanaCollectionDetail />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

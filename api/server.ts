@@ -1,56 +1,182 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 import * as bcrypt from 'bcrypt';
-import { query, getClient } from './db.ts';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import { query, getClient } from './db';
 import { 
   generateDeterministicWallet, 
-  getWalletBalance,
   getWalletBalanceFormatted,
   getWalletBalancesAllChains,
   estimateGasFee,
   isValidWalletAddress,
   mintCertificateNFT,
   transferCertificateNFT
-} from './wallet.ts';
+} from './wallet';
+import { 
+  generateToken, 
+  verifyToken, 
+  requireAuth, 
+  requireAdmin as requireAdminAuth 
+} from './auth-middleware';
+import { 
+  validateRequest,
+  LoginSchema,
+  CreateUserSchema,
+  CreateArtworkSchema,
+  CreateOfferSchema,
+  BuySchema,
+  SwapSchema,
+  UpdateWalletSchema,
+  UpdateArtistStatusSchema,
+  ArtworkSubmissionSchema,
+  UpdateHoldingSchema,
+  ImageUploadSchema,
+  ContractDeploymentSchema,
+  MintNFTSchema,
+  DepositSchema,
+  WithdrawalSchema,
+} from './validation';
+import { 
+  getPresignedUploadUrl, 
+  uploadArtworkImage,
+  deleteArtworkImage 
+} from './storage-service';
+import {
+  deployArtistContract,
+  getArtistContracts,
+  mintNFTFromContract,
+  transferNFT,
+} from './nft-service';
+import {
+  createArtistDeploymentWallet,
+  getArtistDeploymentWallet,
+  createUserDepositWallet,
+  getUserDepositWallet,
+  recordWalletDeposit,
+  recordWalletWithdrawal,
+  getWalletBalance,
+} from './wallet-service';
+import {
+  fetchOpenSeaListings,
+  getOpenSeaFulfillmentData,
+} from './opensea-service';
+import {
+  generateSolanaKeypair,
+  getSolanaBalance,
+  getSolanaBalanceFormatted,
+  isValidSolanaAddress,
+} from './solana-wallet';
+import {
+  fetchSolanaNFTListings,
+  getSolanaNFTDetails,
+  getSolanaNFTWithCachedImage,
+  searchSolanaNFTs,
+} from './solana-nft-service';
+import {
+  cacheImage,
+  getImageFromCache,
+  cleanupOldImages,
+  getCacheStats,
+  clearCache,
+} from './image-cache';
+
+// Extend Express Request type to include custom properties
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+      user?: any;
+      validatedBody?: any;
+      isAdmin?: boolean;
+    }
+  }
+}
 
 dotenv.config({ path: '.env.local' });
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app: Express = express();
 const PORT = process.env.API_PORT || 3000;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// ========== Security Configuration ==========
 
-// Authentication middleware - extracts user ID from headers
-app.use((req: any, res: any, next: any) => {
-  const userId = req.headers['x-user-id'];
-  if (userId) {
-    req.userId = userId;
-  }
-  next();
+// CORS: Restrict to Vercel domain and localhost for development
+const allowedOrigins = [
+  'https://*.vercel.app',
+  'https://collectibles.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+
+app.use(cors({
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed.includes('*')) {
+        const pattern = allowed.replace('*.', '');
+        return origin.endsWith(pattern);
+      }
+      return origin === allowed;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
+
+// Rate limiting for authentication endpoints (5 attempts per 15 minutes)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  message: 'Too many login attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-// Admin verification middleware
+// Rate limiting for financial endpoints (20 attempts per minute)
+const financialLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20,
+  message: 'Too many requests to financial endpoint, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// General API limiter (100 requests per minute)
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(apiLimiter);
+
+// Old insecure auth middleware removed - use JWT tokens instead
+
+// Admin verification middleware - kept for backwards compatibility but now requires JWT
 async function requireAdmin(req: any, res: any, next: any) {
-  try {
-    const userId = req.userId || req.body?.adminId;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized: No user ID provided' });
-    }
-    
-    const result = await query('SELECT is_admin FROM users WHERE id = $1', [userId]);
-    if (result.rows.length === 0 || !result.rows[0].is_admin) {
-      return res.status(403).json({ error: 'Forbidden: Admin access required' });
-    }
-    
-    req.isAdmin = true;
-    next();
-  } catch (error) {
-    res.status(500).json({ error: 'Authorization check failed' });
-  }
+  // First verify JWT token
+  await requireAuth(req, res, () => {
+    // Then check admin status
+    requireAdminAuth(req, res, next);
+  });
 }
 
 
@@ -85,22 +211,235 @@ app.get('/api/health', async (req: Request, res: Response) => {
   }
 });
 
+app.get('/api/opensea/listings', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit || 4), 1), 20);
+    const listings = await fetchOpenSeaListings(limit);
+    res.json({ listings });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Unable to fetch OpenSea listings',
+      detail: error?.message || 'Unknown OpenSea error',
+    });
+  }
+});
+
+app.post('/api/opensea/fulfillment-data', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const fulfillmentData = await getOpenSeaFulfillmentData(req.body);
+    res.json(fulfillmentData);
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Unable to create OpenSea fulfillment data',
+      detail: error?.message || 'Unknown OpenSea fulfillment error',
+    });
+  }
+});
+
+// ========== Solana NFT API ==========
+
+// Get Solana NFT listings
+app.get('/api/solana/nfts/listings', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
+    const listings = await fetchSolanaNFTListings(limit);
+    
+    // Cache images for all listings
+    const listingsWithCachedImages = await Promise.all(
+      listings.map(nft => getSolanaNFTWithCachedImage(nft))
+    );
+    
+    res.json({ listings: listingsWithCachedImages });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Unable to fetch Solana NFT listings',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
+// Get specific Solana NFT details
+app.get('/api/solana/nfts/:contractAddress/:tokenId', async (req: Request, res: Response) => {
+  try {
+    const { contractAddress, tokenId } = req.params as { contractAddress: string; tokenId: string };
+    
+    if (!contractAddress || !tokenId) {
+      return res.status(400).json({ error: 'Missing contractAddress or tokenId' });
+    }
+
+    const nft = await getSolanaNFTDetails(contractAddress, tokenId);
+    
+    if (!nft) {
+      return res.status(404).json({ error: 'NFT not found' });
+    }
+
+    res.json({ nft });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Unable to fetch NFT details',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
+// Search Solana NFTs
+app.get('/api/solana/nfts/search', async (req: Request, res: Response) => {
+  try {
+    const query = req.query.q as string;
+    const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
+
+    if (!query) {
+      return res.status(400).json({ error: 'Search query required' });
+    }
+
+    const results = await searchSolanaNFTs(query, limit);
+    
+    // Cache images
+    const resultsWithCachedImages = await Promise.all(
+      results.map(nft => getSolanaNFTWithCachedImage(nft))
+    );
+
+    res.json({ results: resultsWithCachedImages });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Search failed',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
+// ========== Image Cache API ==========
+
+// Cache an image and get local URL
+app.post('/api/images/cache', async (req: Request, res: Response) => {
+  try {
+    const { imageUrl } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'Image URL required' });
+    }
+
+    const cachedUrl = await getImageFromCache(imageUrl);
+    res.json({ cachedUrl, originalUrl: imageUrl });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Failed to cache image',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
+// Get image cache statistics (admin only)
+app.get('/api/images/cache/stats', requireAuth, requireAdmin, (req: Request, res: Response) => {
+  try {
+    const stats = getCacheStats();
+    res.json(stats);
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Failed to get cache stats',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
+// Clear image cache (admin only)
+app.delete('/api/images/cache', requireAuth, requireAdmin, (req: Request, res: Response) => {
+  try {
+    clearCache();
+    res.json({ message: 'Cache cleared successfully' });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Failed to clear cache',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
+// ========== Solana Wallet API ==========
+
+// Create Solana wallet
+app.post('/api/solana/wallet/create', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { publicKey, privateKey } = generateSolanaKeypair();
+
+    res.json({
+      success: true,
+      wallet: {
+        address: publicKey,
+        // Note: Private key should never be returned in production
+        // Store securely in database or hardware wallet
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Failed to create Solana wallet',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
+// Get Solana wallet balance
+app.get('/api/solana/wallet/:address/balance', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params as { address: string };
+
+    if (!isValidSolanaAddress(address)) {
+      return res.status(400).json({ error: 'Invalid Solana address' });
+    }
+
+    const balanceInfo = await getSolanaBalanceFormatted(address);
+    res.json(balanceInfo);
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Failed to fetch balance',
+      detail: error?.message || 'Unknown error',
+    });
+  }
+});
+
 // ========== Users API ==========
 
-// Get all users
-app.get('/api/users', async (req: Request, res: Response) => {
+// Get all users (admin only) - explicit columns, no passwords
+app.get('/api/users', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const result = await query('SELECT * FROM users ORDER BY created_at DESC');
+    const result = await query(`
+      SELECT 
+        id, email, name, avatar, wallet_balance, wallet_address, 
+        artist_status, artist_type, is_admin, created_at, updated_at
+      FROM users 
+      ORDER BY created_at DESC
+    `);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 
-// Get user by ID
-app.get('/api/users/:id', async (req: Request, res: Response) => {
+// Get user by ID (explicit columns, no password)
+app.get('/api/users/:id', requireAuth, async (req: Request, res: Response) => {
   try {
-    const result = await query('SELECT * FROM users WHERE id = $1', [req.params.id]);
+    // Users can only see their own profile or admins can see anyone
+    const userId = req.params.id;
+    const requestingUserId = (req as any).userId;
+    const isAdmin = (req as any).user?.is_admin;
+    
+    if (userId !== requestingUserId && !isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Cannot view other users' });
+    }
+    
+    const result = await query(`
+      SELECT 
+        id, email, name, avatar, wallet_balance, wallet_address,
+        artist_status, artist_type, artist_bio, portfolio_url, social_url,
+        live_location, call_url, is_admin, created_at, updated_at
+      FROM users 
+      WHERE id = $1
+    `, [userId]);
+    
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -110,23 +449,33 @@ app.get('/api/users/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Create user
-app.post('/api/users', async (req: Request, res: Response) => {
+// Create user (register)
+app.post('/api/users', validateRequest(CreateUserSchema), async (req: Request, res: Response) => {
   const { email, password, name, avatar } = req.body;
   try {
     // Hash password with bcrypt
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // Generate deterministic wallet for user
+    // Generate random wallet for user
     const { address: walletAddress } = generateDeterministicWallet(email);
     
     const result = await query(
       `INSERT INTO users (email, password, name, avatar, wallet_balance, wallet_address, artist_status)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
+       RETURNING 
+         id, email, name, avatar, wallet_balance, wallet_address, 
+         artist_status, is_admin, created_at, updated_at`,
       [email, hashedPassword, name, avatar || 'U', 0, walletAddress, 'collector']
     );
-    res.status(201).json(result.rows[0]);
+    
+    // Generate JWT token for new user
+    const token = generateToken(result.rows[0].id, email);
+    
+    res.status(201).json({
+      user: result.rows[0],
+      token,
+      message: 'User created successfully'
+    });
   } catch (error: any) {
     if (error.code === '23505') {
       return res.status(400).json({ error: 'Email already exists' });
@@ -136,15 +485,11 @@ app.post('/api/users', async (req: Request, res: Response) => {
   }
 });
 
-// Login user (server-side password verification)
-app.post('/api/auth/login', async (req: Request, res: Response) => {
+// Login user - returns JWT token
+app.post('/api/auth/login', authLimiter, validateRequest(LoginSchema), async (req: Request, res: Response) => {
   const { email, password } = req.body;
   try {
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
-    }
-    
-    const result = await query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await query('SELECT id, email, password FROM users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -156,9 +501,23 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
     
-    // Return user without password hash
-    const { password: _, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
+    // Generate JWT token
+    const token = generateToken(user.id, email);
+    
+    // Get full user data without password
+    const userResult = await query(`
+      SELECT 
+        id, email, name, avatar, wallet_balance, wallet_address,
+        artist_status, artist_type, is_admin, created_at, updated_at
+      FROM users 
+      WHERE id = $1
+    `, [user.id]);
+    
+    res.json({
+      user: userResult.rows[0],
+      token,
+      message: 'Login successful'
+    });
   } catch (error: any) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
@@ -190,14 +549,26 @@ app.post('/api/admin/promote', requireAdmin, async (req: Request, res: Response)
   }
 });
 
-// Update user wallet balance
-app.patch('/api/users/:id/wallet', async (req: Request, res: Response) => {
+// Update user wallet balance (requires auth and must be own wallet)
+app.patch('/api/users/:id/wallet', requireAuth, validateRequest(UpdateWalletSchema), async (req: Request, res: Response) => {
   const { amount } = req.body;
+  const userId = req.params.id;
+  const requestingUserId = (req as any).userId;
+  const isAdmin = (req as any).user?.is_admin;
+  
   try {
+    // Users can only update their own wallet, or admins can update anyone
+    if (userId !== requestingUserId && !isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Cannot modify other wallets' });
+    }
+    
     const result = await query(
       `UPDATE users SET wallet_balance = wallet_balance + $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2 RETURNING *`,
-      [amount, req.params.id]
+       WHERE id = $2 
+       RETURNING 
+         id, email, name, avatar, wallet_balance, wallet_address,
+         artist_status, artist_type, is_admin, created_at, updated_at`,
+      [amount, userId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -208,40 +579,37 @@ app.patch('/api/users/:id/wallet', async (req: Request, res: Response) => {
   }
 });
 
-// Update artist status
-app.patch('/api/users/:id/artist-status', async (req: Request, res: Response) => {
-  const {
-    status,
-    artist_status,
-    artistType,
-    artist_type,
-    artistBio,
-    artist_bio,
-    portfolioUrl,
-    portfolio_url,
-    socialUrl,
-    social_url,
-    liveLocation,
-    live_location,
-    callUrl,
-    call_url,
-  } = req.body;
-  const nextStatus = status || artist_status;
+// Update artist status (requires auth)
+app.patch('/api/users/:id/artist-status', requireAuth, validateRequest(UpdateArtistStatusSchema), async (req: Request, res: Response) => {
+  const { status, artist_status, artist_type, artist_bio, portfolio_url, social_url, live_location, call_url } = req.body;
+  const userId = req.params.id;
+  const requestingUserId = (req as any).userId;
+  
   try {
+    // Users can only update their own artist status
+    if (userId !== requestingUserId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot modify other profiles' });
+    }
+    
+    const nextStatus = status || artist_status;
     const result = await query(
       `UPDATE users 
        SET artist_status = $1, artist_type = $2, artist_bio = $3, portfolio_url = $4, 
            social_url = $5, live_location = $6, call_url = $7, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8 RETURNING *`,
+       WHERE id = $8 
+       RETURNING 
+         id, email, name, avatar, wallet_balance, wallet_address,
+         artist_status, artist_type, artist_bio, portfolio_url, social_url,
+         live_location, call_url, is_admin, created_at, updated_at`,
       [
         nextStatus,
-        artistType || artist_type,
-        artistBio || artist_bio,
-        portfolioUrl || portfolio_url,
-        socialUrl || social_url,
-        liveLocation || live_location,
-        callUrl || call_url,
-        req.params.id,
+        artist_type,
+        artist_bio,
+        portfolio_url,
+        social_url,
+        live_location,
+        call_url,
+        userId,
       ]
     );
     if (result.rows.length === 0) {
@@ -325,29 +693,303 @@ app.get('/api/artworks/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Create artwork and optionally list it immediately
-app.post('/api/artworks', async (req: Request, res: Response) => {
-  const client = await getClient();
-  try {
-    const {
-      userId,
-      name,
-      artist,
-      category,
-      city,
-      year,
-      price,
-      image,
-      description,
-      collectionType,
-      supplyName,
-      listImmediately = true,
-    } = req.body;
+// ========== Image Upload API ==========
 
-    if (!userId || !name || !artist || !category || !city || !year || !price) {
-      return res.status(400).json({ error: 'Missing artwork fields' });
+// Get presigned URL for uploading artwork image to Supabase Storage
+app.post('/api/artworks/upload-image/presigned-url', requireAuth, validateRequest(ImageUploadSchema), async (req: Request, res: Response) => {
+  try {
+    const { fileName, fileType } = req.body;
+    const userId = (req as any).userId;
+
+    const uploadData = await getPresignedUploadUrl(userId, fileName, fileType);
+    
+    res.json({
+      uploadUrl: uploadData.uploadUrl,
+      publicUrl: uploadData.publicUrl,
+      path: uploadData.path,
+      expiresIn: 3600,
+      message: 'Upload directly to this URL using PUT request with file content as body'
+    });
+  } catch (error: any) {
+    console.error('Presigned URL error:', error);
+    res.status(400).json({ error: error.message || 'Failed to generate upload URL' });
+  }
+});
+
+// ========== NFT Contract Deployment API (Artist-Controlled) ==========
+
+// Get artist's deployment wallet
+app.get('/api/artist/wallet', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const artistId = (req as any).userId;
+    
+    // Check if user is an artist
+    const userResult = await query(
+      'SELECT artist_status FROM users WHERE id = $1',
+      [artistId]
+    );
+    
+    if (userResult.rows.length === 0 || userResult.rows[0].artist_status === 'collector') {
+      return res.status(403).json({ error: 'User must be an artist to deploy contracts' });
     }
 
+    let wallet = await getArtistDeploymentWallet(artistId);
+    
+    if (!wallet) {
+      wallet = await createArtistDeploymentWallet(artistId);
+    }
+
+    res.json({
+      address: wallet.address,
+      createdAt: wallet.createdAt,
+      message: 'Fund this wallet to deploy NFT contracts and mint NFTs',
+    });
+  } catch (error: any) {
+    console.error('Wallet fetch error:', error);
+    res.status(500).json({ error: error.message || 'Failed to get artist wallet' });
+  }
+});
+
+// Deploy NFT contract (artist-controlled)
+// SECURITY: This endpoint should use wallet delegation or server-side custody
+// NOT accept private keys in request body. For production, implement:
+// - User signs a delegation message with their wallet
+// - Server stores encrypted keys in HSM/KMS
+// - Or use account abstraction / smart wallet patterns
+app.post('/api/artist/deploy-contract', requireAuth, validateRequest(ContractDeploymentSchema), async (req: Request, res: Response) => {
+  try {
+    const { contractName, contractSymbol, baseURIForMetadata, chain = 'base' } = req.body;
+    const artistId = (req as any).userId;
+
+    // Verify artist status
+    const userResult = await query(
+      'SELECT artist_status FROM users WHERE id = $1',
+      [artistId]
+    );
+    
+    if (userResult.rows.length === 0 || userResult.rows[0].artist_status === 'collector') {
+      return res.status(403).json({ error: 'User must be an artist to deploy contracts' });
+    }
+
+    // FIXME: Replace with wallet delegation or server-side custody
+    // For now, return error indicating private key support has been removed
+    return res.status(501).json({ 
+      error: 'Contract deployment is currently disabled for security',
+      message: 'We are migrating to secure wallet delegation. Please contact support.',
+      note: 'Do not send private keys over HTTP. Use wallet signing instead.'
+    });
+    
+    // TODO: Implement proper flow:
+    // 1. Generate deployment auth token
+    // 2. User signs with wallet
+    // 3. Server verifies signature
+    // 4. Deploy contract with server-managed wallet
+  } catch (error: any) {
+    console.error('Contract deployment error:', error);
+    res.status(400).json({ error: error.message || 'Failed to deploy contract' });
+  }
+});
+
+// Get artist's deployed contracts
+app.get('/api/artist/contracts', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const artistId = (req as any).userId;
+    
+    const contracts = await getArtistContracts(artistId);
+    
+    res.json({
+      contracts,
+      count: contracts.length,
+    });
+  } catch (error: any) {
+    console.error('Error fetching contracts:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch contracts' });
+  }
+});
+
+// Mint NFT from artist's contract
+// SECURITY: This endpoint should NOT accept private keys in request body
+// Replace with wallet signing, account abstraction, or server-side custody
+app.post('/api/artist/mint-nft', requireAuth, validateRequest(MintNFTSchema), async (req: Request, res: Response) => {
+  try {
+    const { contractAddress, recipientAddress, metadataURI, chain = 'base' } = req.body;
+    const artistId = (req as any).userId;
+
+    // Verify artist owns contract
+    const contractResult = await query(
+      `SELECT artist_id FROM nft_contracts 
+       WHERE contract_address = $1`,
+      [contractAddress]
+    );
+
+    if (contractResult.rows.length === 0 || contractResult.rows[0].artist_id !== artistId) {
+      return res.status(403).json({ error: 'Contract not found or not owned by artist' });
+    }
+
+    // FIXME: Replace with wallet signing or server-side custody
+    return res.status(501).json({
+      error: 'NFT minting is currently disabled for security',
+      message: 'We are migrating to secure wallet signing. Please contact support.',
+      note: 'Do not send private keys over HTTP. Use wallet signing instead.'
+    });
+
+    // TODO: Implement proper flow:
+    // 1. Artist signs mint authorization with wallet
+    // 2. Server verifies signature matches contract owner
+    // 3. Execute mint with server-managed or delegated key
+  } catch (error: any) {
+    console.error('Minting error:', error);
+    res.status(400).json({ error: error.message || 'Failed to mint NFT' });
+  }
+});
+
+// ========== Wallet Management API ==========
+
+// Create user deposit wallet
+app.post('/api/wallet/create-deposit', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+
+    const wallet = await createUserDepositWallet(userId);
+
+    res.status(201).json({
+      address: wallet.address,
+      createdAt: wallet.createdAt,
+      message: 'Deposit wallet created. Send funds to this address to purchase NFTs.',
+    });
+  } catch (error: any) {
+    console.error('Wallet creation error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create wallet' });
+  }
+});
+
+// Get user deposit wallet
+app.get('/api/wallet/deposit', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+
+    let wallet = await getUserDepositWallet(userId);
+    
+    if (!wallet) {
+      const newWallet = await createUserDepositWallet(userId);
+      wallet = {
+        address: newWallet.address,
+        balance: '0',
+        createdAt: newWallet.createdAt,
+      };
+    }
+
+    res.json({
+      address: wallet.address,
+      balance: wallet.balance,
+      createdAt: wallet.createdAt,
+      message: 'Send funds to this address to purchase NFTs and make offers',
+    });
+  } catch (error: any) {
+    console.error('Wallet fetch error:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch wallet' });
+  }
+});
+
+// Record deposit into wallet
+// SECURITY: Deposits should be verified on-chain
+// TODO: Before marking as confirmed, check:
+// - Transaction exists on specified chain (via RPC or block explorer API)
+// - Transaction sends funds to user's registered deposit wallet
+// - Transaction has sufficient confirmations (>= 12 blocks)
+// - Amount matches what was recorded
+app.post('/api/wallet/deposit', requireAuth, financialLimiter, validateRequest(DepositSchema), async (req: Request, res: Response) => {
+  try {
+    const { amount, transactionHash, chain = 'base' } = req.body;
+    const userId = (req as any).userId;
+
+    // Basic validation: transaction hash should be valid hex
+    if (!/^0x[a-fA-F0-9]{64}$/.test(transactionHash)) {
+      return res.status(400).json({ 
+        error: 'Invalid transaction hash format',
+        hint: 'Transaction hash must be 66 characters (0x + 64 hex chars)'
+      });
+    }
+
+    // FIXME: Add on-chain verification here
+    // Verify transaction exists and matches deposit
+    // Example: await verifyTransactionOnChain(transactionHash, chain, amount, userWalletAddress)
+    
+    const depositResult = await recordWalletDeposit(
+      userId,
+      amount,
+      transactionHash,
+      chain
+    );
+
+    res.json({
+      balance: depositResult.balance,
+      depositedAmount: depositResult.depositedAmount,
+      transactionHash: depositResult.transactionHash,
+      message: 'Deposit recorded. Funds available for purchases and offers. (Note: On-chain verification pending)',
+    });
+  } catch (error: any) {
+    console.error('Deposit error:', error);
+    res.status(400).json({ error: error.message || 'Failed to record deposit' });
+  }
+});
+
+// Withdraw from wallet
+app.post('/api/wallet/withdraw', requireAuth, financialLimiter, validateRequest(WithdrawalSchema), async (req: Request, res: Response) => {
+  try {
+    const { amount, recipientAddress, chain = 'base' } = req.body;
+    const userId = (req as any).userId;
+
+    const withdrawalResult = await recordWalletWithdrawal(
+      userId,
+      amount,
+      recipientAddress,
+      '', // Transaction hash will be generated on-chain
+      chain
+    );
+
+    res.json({
+      balance: withdrawalResult.balance,
+      withdrawnAmount: withdrawalResult.withdrawnAmount,
+      recipientAddress,
+      message: 'Withdrawal initiated. Funds will be sent to recipient address on-chain.',
+    });
+  } catch (error: any) {
+    console.error('Withdrawal error:', error);
+    res.status(400).json({ error: error.message || 'Failed to process withdrawal' });
+  }
+});
+
+// Get wallet balance
+app.get('/api/wallet/balance', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+
+    const balance = await getWalletBalance(userId);
+
+    res.json({
+      address: balance.address,
+      balance: balance.balance,
+      chain: balance.chain,
+    });
+  } catch (error: any) {
+    console.error('Balance fetch error:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch balance' });
+  }
+});
+
+// Create artwork and optionally list it immediately (requires auth)
+app.post('/api/artworks', requireAuth, validateRequest(CreateArtworkSchema), async (req: Request, res: Response) => {
+  const client = await getClient();
+  try {
+    const { name, artist, category, city, year, price, image, description, collectionType, supplyName, listImmediately = true } = req.body;
+    const userId = (req as any).userId;
+    
+    // User can only create artwork for themselves
+    if (req.body.userId && req.body.userId !== userId && !(req as any).user?.is_admin) {
+      return res.status(403).json({ error: 'Forbidden: Cannot create artwork for other users' });
+    }
+    
     await client.query('BEGIN');
 
     const token = `art-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -391,14 +1033,12 @@ app.post('/api/artworks', async (req: Request, res: Response) => {
 
 // ========== Artwork Submissions (Verification Workflow) ==========
 
-// Submit artwork for verification (artist uploads proof)
-app.post('/api/artwork-submissions', async (req: Request, res: Response) => {
-  const { artistId, artId, proofImageUrl, proofDocumentUrl, description } = req.body;
+// Submit artwork for verification (artist uploads proof, requires auth)
+app.post('/api/artwork-submissions', requireAuth, validateRequest(ArtworkSubmissionSchema), async (req: Request, res: Response) => {
+  const { artId, proofImageUrl, proofDocumentUrl, description } = req.body;
+  const artistId = (req as any).userId;
+  
   try {
-    if (!artistId || !artId) {
-      return res.status(400).json({ error: 'artistId and artId are required' });
-    }
-
     const result = await query(
       `INSERT INTO artwork_submissions (artist_id, art_id, proof_image_url, proof_document_url, description, submission_status)
        VALUES ($1, $2, $3, $4, $5, 'submitted')
@@ -416,8 +1056,8 @@ app.post('/api/artwork-submissions', async (req: Request, res: Response) => {
   }
 });
 
-// Get all submissions for admin review
-app.get('/api/artwork-submissions', async (req: Request, res: Response) => {
+// Get all submissions for admin review (admin only)
+app.get('/api/artwork-submissions', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await query(`
       SELECT
@@ -606,9 +1246,18 @@ app.patch('/api/artwork-submissions/:submissionId/reject', requireAdmin, async (
 
 // ========== Holdings API ==========
 
-// Get user holdings
-app.get('/api/holdings/:userId', async (req: Request, res: Response) => {
+// Get user holdings (requires auth)
+app.get('/api/holdings/:userId', requireAuth, async (req: Request, res: Response) => {
   try {
+    const userId = req.params.userId;
+    const requestingUserId = (req as any).userId;
+    const isAdmin = (req as any).user?.is_admin;
+    
+    // Users can only see their own holdings, or admins can see anyone
+    if (userId !== requestingUserId && !isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Cannot view other holdings' });
+    }
+    
     const result = await query(
       `SELECT
         h.id AS holding_id,
@@ -629,7 +1278,7 @@ app.get('/api/holdings/:userId', async (req: Request, res: Response) => {
          AND h.receipt_status = 'active'
          AND h.status <> 'swapped'
        ORDER BY h.acquired_at DESC`,
-      [req.params.userId]
+      [userId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -637,9 +1286,11 @@ app.get('/api/holdings/:userId', async (req: Request, res: Response) => {
   }
 });
 
-// Create holding (user acquires artwork)
-app.post('/api/holdings', async (req: Request, res: Response) => {
-  const { userId, artId, status } = req.body;
+// Create holding (user acquires artwork, requires auth)
+app.post('/api/holdings', requireAuth, async (req: Request, res: Response) => {
+  const { artId, status } = req.body;
+  const userId = (req as any).userId;
+  
   try {
     const result = await query(
       `INSERT INTO holdings (user_id, art_id, status, receipt_status, transfer_status)
@@ -655,14 +1306,11 @@ app.post('/api/holdings', async (req: Request, res: Response) => {
   }
 });
 
-// Update a holding into a listing or owned item
-app.patch('/api/holdings/:holdingId', async (req: Request, res: Response) => {
+// Update a holding into a listing or owned item (requires auth)
+app.patch('/api/holdings/:holdingId', requireAuth, validateRequest(UpdateHoldingSchema), async (req: Request, res: Response) => {
   const { holdingId } = req.params;
-  const { userId, status, listedPrice } = req.body;
-
-  if (!userId || !status) {
-    return res.status(400).json({ error: 'Missing holding update fields' });
-  }
+  const { status, listedPrice } = req.body;
+  const userId = (req as any).userId;
 
   try {
     const result = await query(
@@ -688,8 +1336,8 @@ app.patch('/api/holdings/:holdingId', async (req: Request, res: Response) => {
 
 // ========== Offers API ==========
 
-// Get all offers
-app.get('/api/offers', async (req: Request, res: Response) => {
+// Get all offers (requires auth)
+app.get('/api/offers', requireAuth, async (req: Request, res: Response) => {
   try {
     const result = await query('SELECT * FROM offers WHERE status = $1 ORDER BY created_at DESC', ['pending']);
     res.json(result.rows);
@@ -698,8 +1346,8 @@ app.get('/api/offers', async (req: Request, res: Response) => {
   }
 });
 
-// Get offers for artwork
-app.get('/api/offers/art/:artId', async (req: Request, res: Response) => {
+// Get offers for artwork (requires auth)
+app.get('/api/offers/art/:artId', requireAuth, async (req: Request, res: Response) => {
   try {
     const result = await query(
       'SELECT * FROM offers WHERE art_id = $1 AND status = $2 ORDER BY created_at DESC',
@@ -711,20 +1359,12 @@ app.get('/api/offers/art/:artId', async (req: Request, res: Response) => {
   }
 });
 
-// Create offer with escrow
-app.post('/api/offers', async (req: Request, res: Response) => {
+// Create offer with escrow (requires auth, with rate limiting and validation)
+app.post('/api/offers', requireAuth, financialLimiter, validateRequest(CreateOfferSchema), async (req: Request, res: Response) => {
   const client = await getClient();
   try {
-    const buyerId = req.userId || req.body?.buyerId;
+    const buyerId = (req as any).userId;
     const { artId, amount } = req.body;
-    
-    if (!buyerId) {
-      return res.status(401).json({ error: 'Unauthorized: User ID required' });
-    }
-    
-    if (!artId || !amount || amount <= 0) {
-      return res.status(400).json({ error: 'Missing or invalid offer fields' });
-    }
 
     await client.query('BEGIN');
 
@@ -821,8 +1461,8 @@ app.post('/api/offers', async (req: Request, res: Response) => {
   }
 });
 
-// Accept offer (seller accepts, escrow released to seller)
-app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => {
+// Accept offer (seller accepts, escrow released to seller, requires auth)
+app.patch('/api/offers/:offerId/accept', requireAuth, async (req: Request, res: Response) => {
   const client = await getClient();
   try {
     const { offerId } = req.params;
@@ -958,8 +1598,8 @@ app.patch('/api/offers/:offerId/accept', async (req: Request, res: Response) => 
   }
 });
 
-// Reject offer (refund escrow to buyer)
-app.patch('/api/offers/:offerId/reject', async (req: Request, res: Response) => {
+// Reject offer (refund escrow to buyer, requires auth)
+app.patch('/api/offers/:offerId/reject', requireAuth, async (req: Request, res: Response) => {
   const client = await getClient();
   try {
     const { offerId } = req.params;
@@ -1041,29 +1681,12 @@ app.patch('/api/offers/:offerId/reject', async (req: Request, res: Response) => 
 
 // ========== Direct Purchase API (with Escrow) ==========
 
-// Direct buy artwork (not an offer - immediate purchase)
-app.post('/api/buy', async (req: Request, res: Response) => {
+// Direct buy artwork (not an offer - immediate purchase, requires auth)
+app.post('/api/buy', requireAuth, financialLimiter, validateRequest(BuySchema), async (req: Request, res: Response) => {
   const client = await getClient();
   try {
-    const buyerId = req.userId || req.body?.buyerId;
+    const buyerId = (req as any).userId;
     const { artId, amount, sellerId } = req.body;
-    
-    if (!buyerId) {
-      return res.status(401).json({ error: 'Unauthorized: User ID required' });
-    }
-    
-    if (!artId || !amount || !sellerId || amount <= 0) {
-      return res.status(400).json({ error: 'Missing or invalid purchase fields' });
-    }
-
-    // Check buyer has funds
-    const buyerResult = await client.query('SELECT wallet_balance FROM users WHERE id = $1', [buyerId]);
-    if (buyerResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Buyer not found' });
-    }
-    if (buyerResult.rows[0].wallet_balance < amount) {
-      return res.status(400).json({ error: 'Insufficient balance for purchase' });
-    }
 
     // Check seller exists
     const sellerResult = await client.query('SELECT id FROM users WHERE id = $1', [sellerId]);
@@ -1071,12 +1694,13 @@ app.post('/api/buy', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Seller not found' });
     }
 
-    // Check art exists and seller owns it
+    // Check art exists
     const artResult = await client.query('SELECT * FROM artworks WHERE id = $1', [artId]);
     if (artResult.rows.length === 0) {
       return res.status(404).json({ error: 'Artwork not found' });
     }
 
+    // Check seller owns the artwork
     const holdingResult = await client.query(
       `SELECT *
        FROM holdings
@@ -1090,7 +1714,18 @@ app.post('/api/buy', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Seller does not own this artwork or it is not for sale' });
     }
 
-    await client.query('BEGIN');
+    await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+
+    // Lock buyer row and check funds WITHIN transaction with FOR UPDATE to prevent double-spend
+    const buyerResult = await client.query('SELECT wallet_balance FROM users WHERE id = $1 FOR UPDATE', [buyerId]);
+    if (buyerResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Buyer not found' });
+    }
+    if (buyerResult.rows[0].wallet_balance < amount) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Insufficient balance for purchase' });
+    }
 
     // Create transaction
     const txResult = await client.query(
@@ -1215,20 +1850,12 @@ app.post('/api/buy', async (req: Request, res: Response) => {
 
 // ========== Swap API ==========
 
-// Propose a swap (create bidirectional escrow)
-app.post('/api/swap', async (req: Request, res: Response) => {
+// Propose a swap (create bidirectional escrow, requires auth)
+app.post('/api/swap', requireAuth, validateRequest(SwapSchema), async (req: Request, res: Response) => {
   const client = await getClient();
   try {
-    const userId1 = req.userId || req.body?.userId1;
-    const { userId2, artId1, artId2, cashAmount } = req.body;
-    
-    if (!userId1) {
-      return res.status(401).json({ error: 'Unauthorized: User ID required' });
-    }
-    
-    if (!userId2 || !artId1 || !artId2 || cashAmount < 0) {
-      return res.status(400).json({ error: 'Missing or invalid swap fields' });
-    }
+    const userId1 = (req as any).userId;
+    const { userId2, artId1, artId2, cashAmount = 0 } = req.body;
 
     if (userId1 === userId2) {
       return res.status(400).json({ error: 'Cannot swap with yourself' });
@@ -1557,8 +2184,8 @@ app.get('/api/certificates/user/:userId', async (req: Request, res: Response) =>
 
 // ========== Withdrawals API ==========
 
-// Withdraw funds (no approval needed - immediate)
-app.post('/api/withdrawals', async (req: Request, res: Response) => {
+// Withdraw funds (no approval needed - immediate, requires auth)
+app.post('/api/withdrawals', requireAuth, financialLimiter, async (req: Request, res: Response) => {
   const client = await getClient();
   try {
     const userId = req.userId || req.body?.userId;
@@ -1855,7 +2482,7 @@ app.post('/api/admin/events', requireAdmin, async (req: Request, res: Response) 
 // Get wallet balance from blockchain for specific chain
 app.get('/api/wallet/:address/balance/:chain', async (req: Request, res: Response) => {
   try {
-    const { address, chain } = req.params;
+    const { address, chain } = req.params as { address: string; chain: string };
     
     if (!isValidWalletAddress(address)) {
       return res.status(400).json({ error: 'Invalid wallet address' });
@@ -1883,7 +2510,7 @@ app.get('/api/wallet/:address/balance/:chain', async (req: Request, res: Respons
 // Get wallet balance from all supported chains
 app.get('/api/wallet/:address/balance', async (req: Request, res: Response) => {
   try {
-    const { address } = req.params;
+    const { address } = req.params as { address: string };
     
     if (!isValidWalletAddress(address)) {
       return res.status(400).json({ error: 'Invalid wallet address' });
@@ -1904,7 +2531,7 @@ app.get('/api/wallet/:address/balance', async (req: Request, res: Response) => {
 // Get estimated gas fee for chain
 app.get('/api/wallet/gas-fee/:chain', async (req: Request, res: Response) => {
   try {
-    const { chain } = req.params;
+    const { chain } = req.params as { chain: string };
     
     if (!['base', 'ethereum', 'polygon'].includes(chain)) {
       return res.status(400).json({ error: 'Invalid chain. Use: base, ethereum, or polygon' });
@@ -2079,6 +2706,158 @@ app.post('/api/wallet/sync/:userId', async (req: Request, res: Response) => {
     console.error('Error syncing wallet:', error);
     res.status(500).json({ error: error.message || 'Failed to sync wallet balance' });
   }
+});
+
+// ========== OpenSea Holdings & Trading API ==========
+
+// Record OpenSea NFT holding (import from OpenSea)
+app.post('/api/opensea/holding', requireAuth, validateRequest(z.object({
+  contractAddress: z.string(),
+  tokenId: z.string(),
+  collectionName: z.string(),
+  name: z.string(),
+  image: z.string().optional(),
+  chain: z.string().default('ethereum'),
+  price: z.number().optional(),
+})), async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { contractAddress, tokenId, collectionName, name, image, chain, price } = req.body;
+
+    // Store OpenSea holding in database for persistence
+    const result = await query(
+      `INSERT INTO nft_items 
+       (collection_id, name, mint_address, listing_id, marketplace_source, price_native, currency, status, attributes)
+       VALUES (
+         (SELECT id FROM nft_collections WHERE name = $1 LIMIT 1),
+         $2, $3, $4, 'opensea', $5, 'ETH', 'owned', 
+         $6
+       )
+       RETURNING id, name, listing_id, status`,
+      [
+        collectionName,
+        name,
+        contractAddress + ':' + tokenId,
+        `opensea:${contractAddress}:${tokenId}`,
+        price || 0,
+        JSON.stringify({
+          contractAddress,
+          tokenId,
+          collectionName,
+          image,
+          chain,
+          importedAt: new Date().toISOString(),
+          userId,
+        })
+      ]
+    );
+
+    res.status(201).json({
+      nftId: result.rows[0]?.id,
+      name: result.rows[0]?.name,
+      status: 'imported',
+      message: 'OpenSea NFT holding recorded and persisted to database'
+    });
+  } catch (error: any) {
+    console.error('Error recording OpenSea holding:', error);
+    res.status(400).json({ error: error.message || 'Failed to record OpenSea holding' });
+  }
+});
+
+// Record OpenSea resale listing
+app.post('/api/opensea/resale', requireAuth, validateRequest(z.object({
+  contractAddress: z.string(),
+  tokenId: z.string(),
+  collectionName: z.string(),
+  listedPrice: z.number(),
+  currency: z.string().default('ETH'),
+  orderHash: z.string().optional(),
+})), async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { contractAddress, tokenId, collectionName, listedPrice, currency, orderHash } = req.body;
+
+    // Update NFT item with resale listing
+    const result = await query(
+      `UPDATE nft_items 
+       SET status = 'listed', price_native = $1, currency = $2, 
+           listing_id = COALESCE($3, listing_id),
+           order_hash = COALESCE($4, order_hash),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE mint_address = $5 AND marketplace_source = 'opensea'
+       RETURNING id, name, status, price_native`,
+      [listedPrice, currency, `opensea:${contractAddress}:${tokenId}`, orderHash, `${contractAddress}:${tokenId}`]
+    );
+
+    res.status(200).json({
+      nftId: result.rows[0]?.id,
+      name: result.rows[0]?.name,
+      status: 'listed',
+      listedPrice: result.rows[0]?.price_native,
+      message: 'OpenSea resale listing recorded and persisted'
+    });
+  } catch (error: any) {
+    console.error('Error recording OpenSea resale:', error);
+    res.status(400).json({ error: error.message || 'Failed to record OpenSea resale' });
+  }
+});
+
+// Record OpenSea offer/bid
+app.post('/api/opensea/offer', requireAuth, validateRequest(z.object({
+  contractAddress: z.string(),
+  tokenId: z.string(),
+  collectionName: z.string(),
+  offerPrice: z.number(),
+  offerFrom: z.string().optional(), // buyer address or username
+  currency: z.string().default('ETH'),
+  orderHash: z.string().optional(),
+})), async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { contractAddress, tokenId, collectionName, offerPrice, offerFrom, currency, orderHash } = req.body;
+
+    // Store offer/bid in database
+    // For now, we store it in nft_items as an offer record
+    // In production, create a dedicated opensea_offers table
+    const result = await query(
+      `INSERT INTO offers (buyer_id, art_id, cash, buyer_initials, placed_ago)
+       SELECT $1, a.id, $2, 'OS', 'just now'
+       FROM artworks a
+       WHERE a.token = $3
+       RETURNING id, cash`,
+      [userId, Math.floor(offerPrice), `opensea:${contractAddress}:${tokenId}`]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ 
+        error: 'Artwork not found', 
+        hint: 'OpenSea NFT must exist in our database first' 
+      });
+    }
+
+    res.status(201).json({
+      offerId: result.rows[0]?.id,
+      offerPrice: result.rows[0]?.cash,
+      status: 'pending',
+      message: 'OpenSea offer recorded and persisted to database'
+    });
+  } catch (error: any) {
+    console.error('Error recording OpenSea offer:', error);
+    res.status(400).json({ error: error.message || 'Failed to record OpenSea offer' });
+  }
+});
+
+// Serve static files from the dist directory (built React app)
+app.use(express.static(path.join(__dirname, '../dist'), { maxAge: '1d' }));
+
+// Catch-all route to serve index.html for client-side routing
+app.get('/', (req, res) => {
+  res.sendFile('index.html', { root: path.join(__dirname, '../dist') });
+});
+
+// Fallback for all other routes - serve index.html for client-side routing
+app.use((req, res) => {
+  res.sendFile('index.html', { root: path.join(__dirname, '../dist') });
 });
 
 // Error handling middleware

@@ -35,6 +35,45 @@ CREATE TABLE IF NOT EXISTS artworks (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Digital Collectible Collections Table
+CREATE TABLE IF NOT EXISTS nft_collections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  symbol VARCHAR(50) NOT NULL,
+  description TEXT,
+  cover_image VARCHAR(500),
+  verified BOOLEAN DEFAULT false,
+  featured BOOLEAN DEFAULT false,
+  chain VARCHAR(50) DEFAULT 'ethereum',
+  marketplace_id VARCHAR(255),
+  mint_address VARCHAR(255),
+  supply INTEGER,
+  floor_price_sol DECIMAL(12, 4),
+  volume_sol DECIMAL(12, 4),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Digital Collectible Items Table
+CREATE TABLE IF NOT EXISTS nft_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  collection_id UUID NOT NULL REFERENCES nft_collections(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  edition INTEGER,
+  image VARCHAR(500),
+  mint_address VARCHAR(255),
+  owner_address VARCHAR(255),
+  listing_id VARCHAR(255),
+  order_hash VARCHAR(255),
+  marketplace_source VARCHAR(50) DEFAULT 'opensea',
+  price_native DECIMAL(24, 8),
+  currency VARCHAR(50),
+  status VARCHAR(50) DEFAULT 'available',
+  attributes JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Holdings Table (user art ownership)
 CREATE TABLE IF NOT EXISTS holdings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -152,6 +191,9 @@ CREATE TABLE IF NOT EXISTS certificates (
 
 -- Indexes for performance
 CREATE INDEX idx_holdings_user_id ON holdings(user_id);
+CREATE INDEX idx_nft_collections_chain ON nft_collections(chain);
+CREATE INDEX idx_nft_items_collection_id ON nft_items(collection_id);
+CREATE INDEX idx_nft_items_status ON nft_items(status);
 CREATE INDEX idx_holdings_art_id ON holdings(art_id);
 CREATE INDEX idx_offers_buyer_id ON offers(buyer_id);
 CREATE INDEX idx_offers_art_id ON offers(art_id);

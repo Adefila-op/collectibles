@@ -5,6 +5,7 @@ import { fmt } from "@/lib/art-data";
 import { artAPI, holdingsAPI } from "@/lib/api";
 import {
   Search,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -74,6 +75,23 @@ export default function Home() {
           <Search className="h-4 w-4" />
           Search artists, styles, cities…
         </div>
+
+        <Link to="/explore" className="block animate-fade-up">
+          <div className="rounded-3xl border border-primary/15 bg-card p-4 shadow-card">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">Original digital collectibles</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  Live OpenSea listings tagged as Digital Art.
+                </div>
+              </div>
+              <div className="text-xs font-bold text-primary">Shop</div>
+            </div>
+          </div>
+        </Link>
 
         {/* hero feature */}
         {featuredArtwork ? (

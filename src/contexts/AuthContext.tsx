@@ -91,7 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!response.ok) {
             return { ok: false, error: data.error || "Login failed" };
           }
-          const normalizedUser = normalizeUser(data);
+          if (data.token) localStorage.setItem("artchain_token", data.token);
+          const normalizedUser = normalizeUser(data.user || data);
           localStorage.setItem("artchain_user_id", normalizedUser.id);
           setUser(normalizedUser);
           return { ok: true };
@@ -102,6 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
         });
         if (authError) throw authError;
+        if (authData.session?.access_token) {
+          localStorage.setItem("artchain_token", authData.session.access_token);
+        }
 
         // Fetch user profile from database
         const user = await userAPI.getById(authData.user!.id);
@@ -122,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       try {
-        const newUser = await userAPI.create({ email, password, name, avatar: name.charAt(0).toUpperCase() });
+        const newUser = normalizeUser(await userAPI.create({ email, password, name, avatar: name.charAt(0).toUpperCase() }));
         // Store only user ID in localStorage
         localStorage.setItem("artchain_user_id", newUser.id);
         setUser(newUser);
@@ -136,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     localStorage.removeItem("artchain_user_id");
+    localStorage.removeItem("artchain_token");
     setUser(null);
   }, []);
 
@@ -143,19 +148,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (nextBalance: number): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!user) return { ok: false, error: "Sign in to use your wallet." };
       try {
-        // Fetch latest user to get current balance
-        const latestUsers = await userAPI.getAll();
-        const latestUser = latestUsers.find((u: User) => u.id === user.id);
-        
-        if (!latestUser) {
-          return { ok: false, error: "User not found" };
-        }
-        
-        // Calculate delta from latest balance
-        const delta = nextBalance - (latestUser.walletBalance || 0);
+        // Calculate delta from current user balance
+        const delta = nextBalance - (user.walletBalance || 0);
         const updatedUser = await userAPI.updateWallet(user.id, delta);
-        // Store only user ID, not full user object
-        localStorage.setItem("artchain_user_id", updatedUser.id);
         setUser(updatedUser);
         return { ok: true };
       } catch (err: any) {

@@ -11,11 +11,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
 interface TransactionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   artName: string;
   price: number;
+  artId?: string;
+  sellerId?: string;
   onConfirm?: () => void;
   onTopUpClick?: () => void;
 }
@@ -27,6 +31,8 @@ export function TransactionModal({
   onOpenChange,
   artName,
   price,
+  artId,
+  sellerId,
   onConfirm,
   onTopUpClick,
 }: TransactionModalProps) {
@@ -60,22 +66,55 @@ export function TransactionModal({
     setIsProcessing(true);
     setStep("processing");
 
-    setTimeout(async () => {
-      const result = await updateWalletBalance(remainingBalance);
-      setIsProcessing(false);
+    try {
+      // If we have artId and sellerId, use the /api/buy endpoint (proper flow)
+      if (artId && sellerId) {
+        const token = localStorage.getItem("artchain_token");
+        const response = await fetch(`${API_BASE}/api/buy`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            artId,
+            amount: price,
+            sellerId,
+          }),
+        });
 
-      if (!result.ok) {
-        setMessage(result.error);
-        setStep("error");
-        return;
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error || `Purchase failed with status ${response.status}`);
+        }
+
+        setStep("success");
+        setTimeout(() => {
+          resetAndClose();
+          onConfirm?.();
+        }, 1200);
+      } else {
+        // Fallback: update wallet balance directly (for non-/api/buy flows)
+        const result = await updateWalletBalance(remainingBalance);
+        setIsProcessing(false);
+
+        if (!result.ok) {
+          setMessage(result.error);
+          setStep("error");
+          return;
+        }
+
+        setStep("success");
+        setTimeout(() => {
+          resetAndClose();
+          onConfirm?.();
+        }, 1200);
       }
-
-      setStep("success");
-      setTimeout(() => {
-        resetAndClose();
-        onConfirm?.();
-      }, 1200);
-    }, 900);
+    } catch (err: any) {
+      setIsProcessing(false);
+      setMessage(err.message || "Purchase failed");
+      setStep("error");
+    }
   };
 
   return (

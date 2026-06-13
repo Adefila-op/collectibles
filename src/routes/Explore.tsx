@@ -9,7 +9,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fmt } from "@/lib/art-data";
-import { artAPI, offersAPI, type Art } from "@/lib/api";
+import {
+  artAPI,
+  offersAPI,
+  openSeaAPI,
+  type Art,
+  type OpenSeaListing,
+  type OpenSeaPortfolioItem,
+} from "@/lib/api";
 import { holdingsAPI } from "@/lib/api-transactions";
 import {
   ArrowRight,
@@ -18,6 +25,7 @@ import {
   Bookmark,
   CalendarDays,
   CreditCard,
+  Gem,
   Heart,
   Home as HomeIcon,
   MapPin,
@@ -97,6 +105,11 @@ export default function Explore() {
   const [allOffers, setAllOffers] = useState<any[]>([]);
   const [userHoldings, setUserHoldings] = useState<any[]>([]);
   const [isLoadingArtworks, setIsLoadingArtworks] = useState(true);
+  const [openSeaListings, setOpenSeaListings] = useState<OpenSeaListing[]>([]);
+  const [openSeaPortfolio, setOpenSeaPortfolio] = useState<OpenSeaPortfolioItem[]>([]);
+  const [openSeaMessage, setOpenSeaMessage] = useState("");
+  const [openSeaError, setOpenSeaError] = useState("");
+  const [isLoadingOpenSea, setIsLoadingOpenSea] = useState(true);
 
   const userOwnedArtIds = new Set(userHoldings.map((h) => h.artId));
 
@@ -105,16 +118,24 @@ export default function Explore() {
     const fetchArtworks = async () => {
       try {
         setIsLoadingArtworks(true);
-        const [artworks, offers] = await Promise.all([
+        setIsLoadingOpenSea(true);
+        setOpenSeaError("");
+        const [artworks, offers, digitalListings] = await Promise.all([
           artAPI.getAll(),
-          offersAPI.getAll()
+          offersAPI.getAll(),
+          openSeaAPI.getListings(4).catch((error) => {
+            setOpenSeaError(error instanceof Error ? error.message : "OpenSea listings are unavailable.");
+            return [] as OpenSeaListing[];
+          }),
         ]);
         setAllArtworks(artworks);
         setAllOffers(offers);
+        setOpenSeaListings(digitalListings);
       } catch (err) {
         console.error("Failed to fetch artworks or offers:", err);
       } finally {
         setIsLoadingArtworks(false);
+        setIsLoadingOpenSea(false);
       }
     };
     fetchArtworks();
@@ -195,6 +216,44 @@ export default function Explore() {
     }
 
     setArtistGateOpen(true);
+  }
+
+  function handleBuyOpenSeaListing(listing: OpenSeaListing) {
+    if (!user) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    setOpenSeaPortfolio((items) => {
+      if (items.some((item) => item.id === listing.id)) return items;
+      return [
+        {
+          ...listing,
+          platformStatus: "held",
+          acquiredAt: new Date().toISOString(),
+        },
+        ...items,
+      ];
+    });
+    setOpenSeaMessage(`${listing.name} is now held in your COllectible portfolio.`);
+  }
+
+  function handleListOpenSeaHolding(listingId: string) {
+    setOpenSeaPortfolio((items) =>
+      items.map((item) =>
+        item.id === listingId ? { ...item, platformStatus: "listed" } : item
+      )
+    );
+    setOpenSeaMessage("NFT is listed for resale through your COllectible offer system.");
+  }
+
+  function handleOfferOpenSeaHolding(listingId: string) {
+    setOpenSeaPortfolio((items) =>
+      items.map((item) =>
+        item.id === listingId ? { ...item, platformStatus: "offer-ready" } : item
+      )
+    );
+    setOpenSeaMessage("NFT is ready to receive offers through the offer system.");
   }
 
   useEffect(() => {
@@ -315,6 +374,11 @@ export default function Explore() {
               artworks={filteredArtworks}
               allArtworks={allArtworks}
               offers={allOffers}
+              openSeaListings={openSeaListings}
+              openSeaPortfolio={openSeaPortfolio}
+              openSeaMessage={openSeaMessage}
+              openSeaError={openSeaError}
+              isLoadingOpenSea={isLoadingOpenSea}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               selectedCategory={selectedCategory}
@@ -345,6 +409,9 @@ export default function Explore() {
               topUpRequestKey={topUpRequestKey}
               onListArtClick={handleListArtClick}
               onSwapClick={() => setSwapModalOpen(true)}
+              onBuyOpenSeaListing={handleBuyOpenSeaListing}
+              onListOpenSeaHolding={handleListOpenSeaHolding}
+              onOfferOpenSeaHolding={handleOfferOpenSeaHolding}
             />
           </>
         }
@@ -372,7 +439,7 @@ export default function Explore() {
             {[
               { 
                 t: "Category", 
-                opts: ["Painting", "Sculpture", "Textile", "Beadwork"], 
+                opts: ["Painting", "Sculpture", "Textile", "Beadwork", "Digital Art"], 
                 selected: selectedCategory,
                 onChange: setSelectedCategory
               },
@@ -691,6 +758,11 @@ function DesktopMarketplace({
   artworks,
   allArtworks,
   offers,
+  openSeaListings,
+  openSeaPortfolio,
+  openSeaMessage,
+  openSeaError,
+  isLoadingOpenSea,
   searchQuery,
   onSearchChange,
   selectedCategory,
@@ -718,10 +790,18 @@ function DesktopMarketplace({
   topUpRequestKey,
   onListArtClick,
   onSwapClick,
+  onBuyOpenSeaListing,
+  onListOpenSeaHolding,
+  onOfferOpenSeaHolding,
 }: {
   artworks: Art[];
   allArtworks: Art[];
   offers: any[];
+  openSeaListings: OpenSeaListing[];
+  openSeaPortfolio: OpenSeaPortfolioItem[];
+  openSeaMessage: string;
+  openSeaError: string;
+  isLoadingOpenSea: boolean;
   searchQuery: string;
   onSearchChange: (value: string) => void;
   selectedCategory: string | null;
@@ -749,6 +829,9 @@ function DesktopMarketplace({
   topUpRequestKey: number;
   onListArtClick: () => void;
   onSwapClick: () => void;
+  onBuyOpenSeaListing: (listing: OpenSeaListing) => void;
+  onListOpenSeaHolding: (listingId: string) => void;
+  onOfferOpenSeaHolding: (listingId: string) => void;
 }) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositMethod, setDepositMethod] = useState<"crypto" | "card">("crypto");
@@ -758,14 +841,27 @@ function DesktopMarketplace({
   const [depositCardCvv, setDepositCardCvv] = useState("");
   const [network, setNetwork] = useState<(typeof NETWORKS)[number]>("Base");
   const [depositMessage, setDepositMessage] = useState("");
-  const categories = ["Painting", "Sculpture", "Textile", "Beadwork"];
+  const categories = ["Painting", "Sculpture", "Textile", "Beadwork", "Digital Art"];
   const cities = ["Lagos", "Dakar", "Accra", "Ibadan"];
   const statuses = ["For sale", "Swap only", "Any"];
   const walletAddress = walletAddressForUser(userId);
   const depositNaira = Math.max(0, Math.round((Number(depositAmount) || 0) * NAIRA_PER_USDC));
   const featured = artworks[0] || allArtworks[0];
+  const ownedOpenSeaIds = new Set(openSeaPortfolio.map((item) => item.id));
   const totalValue = artworks.reduce((sum, art) => sum + art.price, 0);
   const visibleArtworks = artworks;
+  const visibleOpenSeaListings = openSeaListings.filter((listing) => {
+    if (selectedCategory && selectedCategory !== "Digital Art") return false;
+    if (selectedStatus === "Swap only") return ownedOpenSeaIds.has(listing.id);
+    if (selectedStatus === "For sale") return !ownedOpenSeaIds.has(listing.id);
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      listing.name.toLowerCase().includes(query) ||
+      listing.collectionName.toLowerCase().includes(query) ||
+      listing.tag.toLowerCase().includes(query)
+    );
+  });
   const portfolioItems = userHoldings
     .filter((holding) => holding.status === "owned" || holding.status === "listed")
     .map((holding) => ({
@@ -976,6 +1072,10 @@ function DesktopMarketplace({
                   userName={userName}
                   initials={initials}
                   onSwapClick={onSwapClick}
+                  openSeaItems={openSeaPortfolio}
+                  openSeaMessage={openSeaMessage}
+                  onListOpenSeaHolding={onListOpenSeaHolding}
+                  onOfferOpenSeaHolding={onOfferOpenSeaHolding}
                 />
               ) : activeSection === "artists" ? (
                 <ArtistDashboard artists={artists} />
@@ -988,10 +1088,10 @@ function DesktopMarketplace({
                       <ShieldCheck className="h-4 w-4" /> Marketplace with proof
                     </div>
                     <h1 className="mt-6 font-display text-5xl font-black leading-tight">
-                      Buy, offer, and swap physical art with onchain history.
+                      Buy, offer, and swap verified tradeable collectibles.
                     </h1>
                     <p className="mt-4 max-w-2xl text-base leading-7 text-slate-700">
-                      Browse verified works with unique IDs, certificates, ownership records, exhibition history, restoration notes, and valuation signals.
+                      Browse COllectible-minted artwork and live OpenSea digital art listings in one marketplace.
                     </p>
                   </div>
                   {featured ? (
@@ -1021,15 +1121,31 @@ function DesktopMarketplace({
                       Marketplace
                     </h2>
                     <div className="text-sm text-slate-500">
-                      {visibleArtworks.length} verified result{visibleArtworks.length === 1 ? "" : "s"}
+                      {visibleArtworks.length + visibleOpenSeaListings.length} tradeable collectible{visibleArtworks.length + visibleOpenSeaListings.length === 1 ? "" : "s"}
                     </div>
                   </div>
-                  <button className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold">
-                    <SlidersHorizontal className="h-4 w-4" /> Filters
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-bold ${
+                        openSeaError
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-primary/10 text-primary"
+                      }`}
+                    >
+                      <Gem className="h-4 w-4" />
+                      {isLoadingOpenSea
+                        ? "Loading OpenSea"
+                        : openSeaError
+                          ? "OpenSea unavailable"
+                          : `${openSeaListings.length} Digital Art`}
+                    </div>
+                    <button className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold">
+                      <SlidersHorizontal className="h-4 w-4" /> Filters
+                    </button>
+                  </div>
                 </div>
 
-                {visibleArtworks.length > 0 ? (
+                {visibleArtworks.length + visibleOpenSeaListings.length > 0 ? (
                   <div className="grid grid-cols-4 gap-5">
                     {visibleArtworks.map((art) => {
                       const isOwned = userOwnedArtIds.has(art.id);
@@ -1091,14 +1207,97 @@ function DesktopMarketplace({
                         </article>
                       );
                     })}
+                    {visibleOpenSeaListings.map((listing) => {
+                      const isOwned = ownedOpenSeaIds.has(listing.id);
+                      return (
+                        <article
+                          key={listing.id}
+                          className="group overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-card"
+                        >
+                          <a
+                            href={listing.openseaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="relative block h-52 overflow-hidden bg-slate-100"
+                          >
+                            {listing.image ? (
+                              <img
+                                src={listing.image}
+                                alt={listing.name}
+                                loading="lazy"
+                                decoding="async"
+                                className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
+                              />
+                            ) : (
+                              <div className="grid h-full w-full place-items-center bg-slate-950 text-white">
+                                <Gem className="h-8 w-8" />
+                              </div>
+                            )}
+                            <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-primary">
+                              <Gem className="h-3 w-3" /> Digital Art
+                            </div>
+                          </a>
+                          <div className="p-4">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <a
+                                  href={listing.openseaUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block truncate text-sm font-semibold hover:text-primary"
+                                >
+                                  {listing.name}
+                                </a>
+                                <div className="mt-1 truncate text-xs text-slate-500">
+                                  {listing.collectionName} - {listing.chain}
+                                </div>
+                              </div>
+                              <button className="text-slate-400 hover:text-primary">
+                                <Heart className="h-5 w-5" />
+                              </button>
+                            </div>
+                            <div className="mt-3 font-semibold">{listing.price} {listing.currency}</div>
+                            <div className="truncate text-xs text-slate-500">OpenSea #{listing.tokenId}</div>
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => onOfferOpenSeaHolding(listing.id)}
+                                disabled={!isOwned}
+                                className="rounded-xl border border-slate-200 px-3 py-2 text-center text-xs font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
+                              >
+                                Offer
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onBuyOpenSeaListing(listing)}
+                                className="rounded-xl bg-slate-950 px-3 py-2 text-center text-xs font-semibold text-white transition hover:bg-slate-800"
+                              >
+                                {isOwned ? "Held" : "Buy"}
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="grid min-h-[320px] place-items-center rounded-2xl bg-slate-50 text-center">
                     <div>
                       <Search className="mx-auto h-9 w-9 text-slate-400" />
                       <div className="mt-3 text-sm font-semibold">No matching artwork</div>
-                      <div className="mt-1 text-sm text-slate-500">Try a different city, category, or price range.</div>
+                      <div className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                        {openSeaError
+                          ? openSeaError
+                          : "Try a different city, category, or price range."}
+                      </div>
                     </div>
+                  </div>
+                )}
+                {(openSeaMessage || openSeaError) && (
+                  <div className={`mt-5 rounded-2xl p-4 text-sm font-semibold ${
+                    openSeaMessage ? "bg-primary/10 text-primary" : "bg-amber-50 text-amber-700"
+                  }`}>
+                    {openSeaMessage || openSeaError}
                   </div>
                 )}
               </div>
@@ -1150,7 +1349,8 @@ function DesktopMarketplace({
                 </div>
                 <div className="mt-5 space-y-4">
                   {[
-                    ["Visible value", fmt(totalValue), "+12.4%"],
+                    ["Visible art value", fmt(totalValue), "+12.4%"],
+                    ["OpenSea Digital Art", openSeaListings.length.toLocaleString(), "live"],
                     ["Verified works", artworks.length.toLocaleString(), "live"],
                     ["Avg. listing", artworks.length ? fmt(Math.round(totalValue / artworks.length)) : fmt(0), "current"],
                   ].map(([label, value, meta]) => (
@@ -1325,6 +1525,10 @@ function PortfolioDashboard({
   userName,
   initials,
   onSwapClick,
+  openSeaItems,
+  openSeaMessage,
+  onListOpenSeaHolding,
+  onOfferOpenSeaHolding,
 }: {
   items: { holding: UserHolding; art: Art }[];
   offers: any[];
@@ -1333,6 +1537,10 @@ function PortfolioDashboard({
   userName: string;
   initials: string;
   onSwapClick?: () => void;
+  openSeaItems: OpenSeaPortfolioItem[];
+  openSeaMessage: string;
+  onListOpenSeaHolding: (listingId: string) => void;
+  onOfferOpenSeaHolding: (listingId: string) => void;
 }) {
   const collectionItems: { holding: UserHolding; art: Art }[] =
     items.length > 0
@@ -1341,6 +1549,7 @@ function PortfolioDashboard({
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const heldArtIds = new Set(collectionItems.map((item) => item.art.id));
   const artValue = collectionItems.reduce((sum, item) => sum + item.art.price, 0);
+  const openSeaValue = openSeaItems.reduce((sum, item) => sum + Number(item.price || 0), 0);
   const listedCount = collectionItems.filter((item) => item.holding.status === "listed").length;
   const generalBalance = walletBalance + artValue;
   const activeOffers = offers.map((offer: any) => ({
@@ -1378,7 +1587,8 @@ function PortfolioDashboard({
             {[
               ["General balance", fmt(generalBalance), "Liquid + collection"],
               ["Liquid balance", `${walletBalance.toLocaleString()} AC`, "Spendable wallet"],
-              ["Portfolio balance", fmt(artValue), `${collectionItems.length} held, ${listedCount} listed`],
+              ["Portfolio balance", fmt(artValue), `${collectionItems.length} art held, ${listedCount} listed`],
+              ["Digital Art", `${openSeaValue.toFixed(2)} ETH`, `${openSeaItems.length} held`],
             ].map(([label, value, meta]) => (
               <div key={label} className="rounded-2xl bg-slate-50 p-4">
                 <div className="text-xs text-slate-500">{label}</div>
@@ -1396,6 +1606,68 @@ function PortfolioDashboard({
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="rounded-[28px] bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-xl font-semibold">Digital Art holdings</h2>
+              <div className="text-sm text-slate-500">Bought through COllectible from OpenSea and ready for resale or offers</div>
+            </div>
+            <Gem className="h-5 w-5 text-primary" />
+          </div>
+          {openSeaItems.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {openSeaItems.map((item) => {
+                return (
+                  <div key={item.id} className="flex w-full items-center gap-4 rounded-2xl bg-slate-50 p-3">
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="h-20 w-20 rounded-2xl object-cover" />
+                    ) : (
+                      <div className="grid h-20 w-20 place-items-center rounded-2xl bg-slate-950 text-white">
+                        <Gem className="h-5 w-5" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{item.name}</div>
+                      <div className="mt-1 truncate text-xs text-slate-500">
+                        {item.collectionName} - {item.price} {item.currency}
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 text-[10px] font-semibold">
+                        <span className="rounded-full bg-white px-2 py-1 text-primary">{item.platformStatus}</span>
+                        <span className="rounded-full bg-white px-2 py-1 text-slate-600">OpenSea source</span>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onListOpenSeaHolding(item.id)}
+                        className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white"
+                      >
+                        Resell
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onOfferOpenSeaHolding(item.id)}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-primary"
+                      >
+                        Offers
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
+              Buy a Digital Art listing from the marketplace and it will appear here.
+            </div>
+          )}
+          {openSeaMessage && (
+            <div className="mt-4 rounded-2xl bg-primary/10 p-4 text-sm font-semibold text-primary">
+              {openSeaMessage}
+            </div>
+          )}
         </section>
 
         <section>

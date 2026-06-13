@@ -23,16 +23,19 @@ function getSupabase() {
 
 // REST API helper
 async function fetchAPI(endpoint: string, options: any = {}) {
+  const token = localStorage.getItem('artchain_token');
   const response = await fetch(`${API_BASE}${endpoint}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     ...options,
   });
   
   if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.detail || error?.error || `API error: ${response.status}`);
   }
   
   return response.json();
@@ -40,6 +43,7 @@ async function fetchAPI(endpoint: string, options: any = {}) {
 
 // Add property aliases for backward compatibility
 function addUserAliases(user: any): any {
+  if (user?.user) return addUserAliases(user.user);
   if (!user) return user;
   return {
     ...user,
@@ -122,6 +126,31 @@ export interface Art {
   marketPrice?: number;
 }
 
+export interface OpenSeaListing {
+  id: string;
+  source: 'opensea';
+  tag: 'Digital Art';
+  collectionSlug: string;
+  collectionName: string;
+  name: string;
+  tokenId: string;
+  contract: string;
+  chain: string;
+  image: string;
+  price: string;
+  currency: string;
+  priceUsd?: string;
+  orderHash: string;
+  protocolAddress?: string;
+  owner?: string;
+  openseaUrl: string;
+}
+
+export interface OpenSeaPortfolioItem extends OpenSeaListing {
+  acquiredAt: string;
+  platformStatus: 'held' | 'listed' | 'offer-ready';
+}
+
 export interface Transaction {
   id: string;
   type: string;
@@ -190,10 +219,16 @@ export const userAPI = {
   },
   create: async (user: Partial<User> & { password: string }) => {
     if (!supabase) {
-      return addUserAliases(await fetchAPI('/api/users', {
+      const response = await fetchAPI('/api/users', {
         method: 'POST',
         body: JSON.stringify(user),
-      }));
+      });
+      // Response shape: { user, token, message }
+      if (response?.token) localStorage.setItem('artchain_token', response.token);
+      // Extract user object and ensure it has required fields
+      const userData = response?.user || response;
+      if (!userData?.id) throw new Error('Invalid user response from server');
+      return addUserAliases(userData);
     }
     // Sign up user with Supabase Auth
     const { data: authData, error: authError } = await getSupabase().auth.signUp({
@@ -481,12 +516,18 @@ export const transactionsAPI = {
 
 // Purchase API
 export const purchaseAPI = {
-  buy: async (buyerId: string, artId: string, amount: number, sellerId: string) => {
+  buy: async (_buyerId: string, artId: string, amount: number, sellerId: string) => {
+    if (!supabase) {
+      return fetchAPI('/api/buy', {
+        method: 'POST',
+        body: JSON.stringify({ artId, amount, sellerId }),
+      });
+    }
     // Create a transaction record for the purchase
     const { data, error } = await getSupabase().from('transactions')
       .insert({
         type: 'purchase',
-        buyer_id: buyerId,
+        buyer_id: _buyerId,
         seller_id: sellerId,
         amount: amount,
         art_id: artId,
@@ -497,6 +538,36 @@ export const purchaseAPI = {
       .single();
     if (error) throw error;
     return data;
+  },
+};
+
+export const openSeaAPI = {
+  getListings: async (limit = 4): Promise<OpenSeaListing[]> => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetchAPI(`/api/opensea/listings?limit=${limit}`, {
+        signal: controller.signal,
+      });
+      return Array.isArray(response?.listings) ? response.listings : [];
+    } catch (error) {
+      throw new Error(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'OpenSea listings failed: API server did not respond within 5 seconds'
+          : error instanceof Error
+          ? `OpenSea listings failed: ${error.message}`
+          : 'OpenSea listings failed'
+      );
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  },
+  getFulfillmentData: async (payload: any) => {
+    return fetchAPI('/api/opensea/fulfillment-data', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 };
 
