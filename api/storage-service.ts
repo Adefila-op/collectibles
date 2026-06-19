@@ -5,11 +5,15 @@ import * as path from 'path';
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 
+let supabase: any = null;
+
 if (!supabaseUrl || !supabaseKey) {
   console.warn('Supabase credentials not configured. Image uploads will be disabled.');
+} else {
+  supabase = createClient(supabaseUrl, supabaseKey);
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export { supabase };
 
 /**
  * Generate a presigned URL for uploading artwork images

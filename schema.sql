@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email VARCHAR(255) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
+  username VARCHAR(50) UNIQUE,
   name VARCHAR(255),
   avatar VARCHAR(50),
   wallet_balance BIGINT DEFAULT 0,
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   social_url VARCHAR(500),
   live_location VARCHAR(255),
   call_url VARCHAR(500),
+  onboarding_completed BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -190,19 +192,19 @@ CREATE TABLE IF NOT EXISTS certificates (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_holdings_user_id ON holdings(user_id);
-CREATE INDEX idx_nft_collections_chain ON nft_collections(chain);
-CREATE INDEX idx_nft_items_collection_id ON nft_items(collection_id);
-CREATE INDEX idx_nft_items_status ON nft_items(status);
-CREATE INDEX idx_holdings_art_id ON holdings(art_id);
-CREATE INDEX idx_offers_buyer_id ON offers(buyer_id);
-CREATE INDEX idx_offers_art_id ON offers(art_id);
-CREATE INDEX idx_transactions_buyer_id ON transactions(buyer_id);
-CREATE INDEX idx_transactions_seller_id ON transactions(seller_id);
-CREATE INDEX idx_transactions_status ON transactions(status);
-CREATE INDEX idx_escrow_transaction_id ON escrow(transaction_id);
-CREATE INDEX idx_royalties_artist_id ON artist_royalties(artist_id);
-CREATE INDEX idx_admin_events_admin_id ON admin_events(admin_id);
-CREATE INDEX idx_certificates_holding_id ON certificates(holding_id);
-CREATE INDEX idx_certificates_buyer_id ON certificates(buyer_id);
-CREATE INDEX idx_certificates_art_id ON certificates(art_id);
+CREATE INDEX IF NOT EXISTS idx_holdings_user_id ON holdings(user_id);
+CREATE INDEX IF NOT EXISTS idx_nft_collections_chain ON nft_collections(chain);
+CREATE INDEX IF NOT EXISTS idx_nft_items_collection_id ON nft_items(collection_id);
+CREATE INDEX IF NOT EXISTS idx_nft_items_status ON nft_items(status);
+CREATE INDEX IF NOT EXISTS idx_holdings_art_id ON holdings(art_id);
+CREATE INDEX IF NOT EXISTS idx_offers_buyer_id ON offers(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_offers_art_id ON offers(art_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_buyer_id ON transactions(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_seller_id ON transactions(seller_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_escrow_transaction_id ON escrow(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_royalties_artist_id ON artist_royalties(artist_id);
+CREATE INDEX IF NOT EXISTS idx_admin_events_admin_id ON admin_events(admin_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_holding_id ON certificates(holding_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_buyer_id ON certificates(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_art_id ON certificates(art_id);

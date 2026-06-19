@@ -156,6 +156,10 @@
   70% { box-shadow: 0 0 0 18px oklch(0.72 0.19 235 / 0); }
   100% { box-shadow: 0 0 0 0 oklch(0.72 0.19 235 / 0); }
 }
+@keyframes shine {
+  0% { left: -60%; }
+  100% { left: 160%; }
+}
 
 /* Utilities */
 .bg-hero { background: var(--gradient-hero); }

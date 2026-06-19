@@ -17,6 +17,12 @@ export const CreateUserSchema = z.object({
   avatar: z.string().optional(),
 });
 
+export const UpdateUserSchema = z.object({
+  username: z.string().min(3, 'Username must be at least 3 characters').optional(),
+  name: z.string().min(1, 'Name cannot be empty').optional(),
+  avatar: z.string().optional(),
+});
+
 export const CreateArtworkSchema = z.object({
   userId: z.string().uuid('Invalid user ID'),
   name: z.string().min(1, 'Artwork name is required'),

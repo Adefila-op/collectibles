@@ -4,7 +4,7 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 // Use DATABASE_URL for Supabase connection, fall back to individual env vars for local dev
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres.tezhvgyffjvfwricgohv:ollectibles0%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres';
 let pool: Pool | null = null;
 let useMockDb = false;
 
@@ -115,9 +115,71 @@ function handleMockQuery(text: string, params?: any[]) {
   else if (text.includes('ALTER TABLE')) {
     result.rowCount = 0;
   }
-  // Handle INSERT (ignore in mock mode to prevent duplicates)
+  // Handle INSERT (mock insert and return data)
   else if (text.includes('INSERT')) {
-    result.rowCount = 0;
+    if (text.includes('INSERT INTO users')) {
+      const newUser = {
+        id: `mock-user-${Date.now()}`,
+        email: params?.[0],
+        password: params?.[1],
+        name: params?.[2],
+        avatar: params?.[3],
+        wallet_balance: params?.[4],
+        wallet_address: params?.[5],
+        artist_status: params?.[6],
+        privy_id: params?.[7],
+        is_admin: params?.[8],
+        onboarding_completed: params?.[9] ?? false,
+        username: null,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+      mockData.users.push(newUser);
+      result.rows = [newUser];
+      result.rowCount = 1;
+    } else {
+      result.rowCount = 0;
+    }
+  }
+  // Handle UPDATE users (onboarding)
+  else if (text.includes('UPDATE users') && text.includes('onboarding_completed')) {
+    const user = mockData.users.find((u: any) => u.id === params?.[2]);
+    if (user) {
+      user.name = params?.[0];
+      user.username = params?.[1];
+      user.onboarding_completed = true;
+      result.rows = [user];
+      result.rowCount = 1;
+    } else {
+      result.rowCount = 0;
+    }
+  }
+  // Handle UPDATE users (sync)
+  else if (text.includes('UPDATE users')) {
+    const user = mockData.users.find((u: any) => u.id === params?.[3]);
+    if (user) {
+      user.privy_id = params?.[0];
+      user.wallet_address = params?.[1] || user.wallet_address;
+      user.is_admin = params?.[2];
+      result.rows = [user];
+      result.rowCount = 1;
+    } else {
+      result.rowCount = 0;
+    }
+  }
+  // Handle username check
+  else if (text.includes('SELECT id FROM users WHERE username = $1')) {
+    const user = mockData.users.find((u: any) => u.username === params?.[0] && u.id !== params?.[1]);
+    result.rows = user ? [user] : [];
+    result.rowCount = user ? 1 : 0;
+  }
+  // Handle sync search
+  else if (text.includes('SELECT * FROM users WHERE privy_id = $1 OR email = $2')) {
+    const user = mockData.users.find((u: any) => u.privy_id === params?.[0] || u.email === params?.[1]);
+    if (user) {
+      result.rows = [user];
+      result.rowCount = 1;
+    }
   }
   // Default response
   else {

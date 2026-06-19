@@ -44,7 +44,7 @@ export function BottomNav() {
           <div className="h-12 w-12" aria-hidden="true" />
         )}
         <Item to="/swap" icon={Repeat2} label="Swap" />
-        <Item to="/profile" icon={User} label="Profile" />
+        <Item to="/explore?section=settings" icon={User} label="Profile" />
       </div>
     </div>
   );

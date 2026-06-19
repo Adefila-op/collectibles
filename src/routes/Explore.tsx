@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
 import { BrandLogo } from "@/components/BrandLogo";
 import {
@@ -44,9 +44,11 @@ import {
   TrendingUp,
   UserRound,
   Wallet,
+  LogOut,
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePrivy } from "@privy-io/react-auth";
 import { type UserHolding } from "@/lib/db";
 import { BuyArtModal } from "@/components/modals/BuyArtModal";
 import { BuyArtModalDesktop } from "@/components/modals/BuyArtModalDesktop";
@@ -59,8 +61,10 @@ import { TransactionModal } from "@/components/modals/TransactionModal";
 import { ListingModalDesktop } from "@/components/modals/ListingModalDesktop";
 import { TopUpModal } from "@/components/modals/TopUpModal";
 
-type DashboardSection = "explore" | "portfolio" | "artists";
-const dashboardSections: DashboardSection[] = ["explore", "portfolio", "artists"];
+import { SettingsDashboard } from "@/components/SettingsDashboard";
+
+type DashboardSection = "explore" | "portfolio" | "artists" | "settings";
+const dashboardSections: DashboardSection[] = ["explore", "portfolio", "artists", "settings"];
 const NAIRA_PER_USDC = 1500;
 const NETWORKS = ["Base", "Ethereum", "Polygon"] as const;
 
@@ -74,8 +78,10 @@ function walletAddressForUser(userId: string) {
 }
 
 export default function Explore() {
-  const { user, updateWalletBalance, submitArtistApplication } = useAuth();
-  const initialSection = new URLSearchParams(window.location.search).get("section");
+  const { user, isLoading, signOut, updateWalletBalance, submitArtistApplication } = useAuth();
+  const { login } = usePrivy();
+  const location = useLocation();
+  const initialSection = new URLSearchParams(location.search).get("section");
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -85,6 +91,13 @@ export default function Explore() {
   const [activeSection, setActiveSection] = useState<DashboardSection>(
     dashboardSections.includes(initialSection as DashboardSection) ? (initialSection as DashboardSection) : "explore"
   );
+
+  useEffect(() => {
+    const section = new URLSearchParams(location.search).get("section");
+    if (section && dashboardSections.includes(section as DashboardSection)) {
+      setActiveSection(section as DashboardSection);
+    }
+  }, [location.search]);
 
   const [buyModalOpen, setBuyModalOpen] = useState(false);
   const [offerModalOpen, setOfferModalOpen] = useState(false);
@@ -364,6 +377,32 @@ export default function Explore() {
     </>
   );
 
+  if (isLoading) {
+    return (
+      <AppFrame>
+        <div className="dash-gate">
+          <div className="loading-spinner" style={{ width: 40, height: 40, borderWidth: 3, margin: "0 auto 1rem" }} />
+          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.9rem" }}>Loading...</p>
+        </div>
+      </AppFrame>
+    );
+  }
+
+  if (!user) {
+    return (
+      <AppFrame>
+        <div className="dash-gate">
+          <div className="dash-gate-inner">
+            <UserRound size={40} />
+            <h2>Sign in to explore the marketplace</h2>
+            <p>Connect with your email or Google to discover and collect artworks.</p>
+            <button className="dash-gate-btn" onClick={() => login()}>Sign In</button>
+          </div>
+        </div>
+      </AppFrame>
+    );
+  }
+
   return (
     <>
       <AppFrame
@@ -412,6 +451,7 @@ export default function Explore() {
               onBuyOpenSeaListing={handleBuyOpenSeaListing}
               onListOpenSeaHolding={handleListOpenSeaHolding}
               onOfferOpenSeaHolding={handleOfferOpenSeaHolding}
+              onSignOut={signOut}
             />
           </>
         }
@@ -793,6 +833,7 @@ function DesktopMarketplace({
   onBuyOpenSeaListing,
   onListOpenSeaHolding,
   onOfferOpenSeaHolding,
+  onSignOut,
 }: {
   artworks: Art[];
   allArtworks: Art[];
@@ -832,6 +873,7 @@ function DesktopMarketplace({
   onBuyOpenSeaListing: (listing: OpenSeaListing) => void;
   onListOpenSeaHolding: (listingId: string) => void;
   onOfferOpenSeaHolding: (listingId: string) => void;
+  onSignOut: () => void;
 }) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositMethod, setDepositMethod] = useState<"crypto" | "card">("crypto");
@@ -980,8 +1022,12 @@ function DesktopMarketplace({
             ].map((item) => (
               <Link
                 key={item.label}
-                to="/profile"
-                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                to={`/explore?section=${item.label.toLowerCase()}`}
+                className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition ${
+                  activeSection === item.label.toLowerCase()
+                    ? "bg-primary/10 font-semibold text-primary"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -992,16 +1038,24 @@ function DesktopMarketplace({
             {isLoggedIn ? (
               <>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white">
-                      {initials}
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold">{userName}</div>
-                      <div className="text-xs text-slate-500">
-                        {artistStatus === "approved" ? "Artist" : artistStatus === "pending" ? "Artist pending" : "Collector"}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">{userName}</div>
+                        <div className="text-xs text-slate-500 truncate">
+                          {artistStatus === "approved" ? "Artist" : artistStatus === "pending" ? "Artist pending" : "Collector"}
+                        </div>
                       </div>
                     </div>
+                    <button 
+                      onClick={() => onSignOut()}
+                      className="shrink-0 whitespace-nowrap text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                    >
+                      Sign Out
+                    </button>
                   </div>
                   <div className="mt-5 border-t border-slate-100 pt-4">
                     <div className="text-xs text-slate-500">Liquid Balance</div>
@@ -1079,6 +1133,8 @@ function DesktopMarketplace({
                 />
               ) : activeSection === "artists" ? (
                 <ArtistDashboard artists={artists} />
+              ) : activeSection === "settings" ? (
+                <SettingsDashboard />
               ) : (
                 <>
               <div className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(120deg,#d9edff,#f1ddff_54%,#ffe1ed)] p-8 shadow-sm">

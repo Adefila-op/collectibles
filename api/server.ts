@@ -26,6 +26,7 @@ import {
   validateRequest,
   LoginSchema,
   CreateUserSchema,
+  UpdateUserSchema,
   CreateArtworkSchema,
   CreateOfferSchema,
   BuySchema,
@@ -184,7 +185,10 @@ async function ensureRuntimeSchema() {
   try {
     await query(`
       ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false
+        ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS privy_id VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS username VARCHAR(50) UNIQUE,
+        ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false
     `);
     
     await query(`
@@ -449,78 +453,99 @@ app.get('/api/users/:id', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Create user (register)
-app.post('/api/users', validateRequest(CreateUserSchema), async (req: Request, res: Response) => {
-  const { email, password, name, avatar } = req.body;
+// Sync Privy User (register/login)
+const ADMIN_EMAILS = ['admin@example.com']; // Hardcoded admins
+
+app.post('/api/auth/sync', async (req: Request, res: Response) => {
+  const { privyId, email, name, walletAddress } = req.body;
   try {
-    // Hash password with bcrypt
-    const hashedPassword = await bcrypt.hash(password, 10);
+    if (!privyId) {
+      return res.status(400).json({ error: 'Missing privyId' });
+    }
+
+    // Check if user exists by privy_id or email
+    let result = await query('SELECT * FROM users WHERE privy_id = $1 OR email = $2 LIMIT 1', [privyId, email]);
+    let user;
     
-    // Generate random wallet for user
-    const { address: walletAddress } = generateDeterministicWallet(email);
+    const isAdmin = ADMIN_EMAILS.includes(email);
+
+    if (result.rows.length === 0) {
+      // Create new user
+      const insertResult = await query(
+        `INSERT INTO users (email, password, name, avatar, wallet_balance, wallet_address, artist_status, privy_id, is_admin, onboarding_completed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING 
+           id, email, username, name, avatar, wallet_balance, wallet_address, 
+           artist_status, is_admin, onboarding_completed, created_at, updated_at`,
+        [email || privyId, 'privy_managed', name || '', name?.charAt(0)?.toUpperCase() || 'U', 0, walletAddress || null, 'collector', privyId, isAdmin, false]
+      );
+      user = insertResult.rows[0];
+    } else {
+      user = result.rows[0];
+      // Update privy_id, walletAddress, and admin status if they changed
+      if (user.privy_id !== privyId || user.wallet_address !== walletAddress || user.is_admin !== isAdmin) {
+        const updateResult = await query(
+          `UPDATE users SET privy_id = $1, wallet_address = COALESCE($2, wallet_address), is_admin = $3 WHERE id = $4
+           RETURNING 
+             id, email, username, name, avatar, wallet_balance, wallet_address, 
+             artist_status, is_admin, onboarding_completed, created_at, updated_at`,
+          [privyId, walletAddress, isAdmin, user.id]
+        );
+        user = updateResult.rows[0];
+      }
+    }
     
-    const result = await query(
-      `INSERT INTO users (email, password, name, avatar, wallet_balance, wallet_address, artist_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING 
-         id, email, name, avatar, wallet_balance, wallet_address, 
-         artist_status, is_admin, created_at, updated_at`,
-      [email, hashedPassword, name, avatar || 'U', 0, walletAddress, 'collector']
-    );
+    // Create JWT for existing routes that still expect it (or use Privy's token)
+    const token = generateToken(user.id, user.email);
     
-    // Generate JWT token for new user
-    const token = generateToken(result.rows[0].id, email);
-    
-    res.status(201).json({
-      user: result.rows[0],
+    res.json({
+      user,
       token,
-      message: 'User created successfully'
+      message: 'Sync successful'
     });
   } catch (error: any) {
-    if (error.code === '23505') {
-      return res.status(400).json({ error: 'Email already exists' });
-    }
-    console.error('User creation error:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    console.error('Auth sync error:', error);
+    res.status(500).json({ error: 'Auth sync failed' });
   }
 });
 
-// Login user - returns JWT token
-app.post('/api/auth/login', authLimiter, validateRequest(LoginSchema), async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+// User Onboarding (Complete profile)
+app.post('/api/users/:id/onboard', requireAuth, async (req: Request, res: Response) => {
+  const { name, username } = req.body;
+  const userId = req.params.id;
+  const requestingUserId = (req as any).userId;
+  
   try {
-    const result = await query('SELECT id, email, password FROM users WHERE email = $1', [email]);
+    if (userId !== requestingUserId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot onboard other profiles' });
+    }
+    if (!name || !username) {
+      return res.status(400).json({ error: 'Name and username are required' });
+    }
+
+    // Check if username is taken
+    const usernameCheck = await query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, userId]);
+    if (usernameCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Username is already taken' });
+    }
+
+    const result = await query(
+      `UPDATE users 
+       SET name = $1, username = $2, onboarding_completed = true, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3 
+       RETURNING 
+         id, email, username, name, avatar, wallet_balance, wallet_address,
+         artist_status, is_admin, onboarding_completed, created_at, updated_at`,
+      [name, username, userId]
+    );
+
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(404).json({ error: 'User not found' });
     }
-    
-    const user = result.rows[0];
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    
-    if (!passwordMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-    
-    // Generate JWT token
-    const token = generateToken(user.id, email);
-    
-    // Get full user data without password
-    const userResult = await query(`
-      SELECT 
-        id, email, name, avatar, wallet_balance, wallet_address,
-        artist_status, artist_type, is_admin, created_at, updated_at
-      FROM users 
-      WHERE id = $1
-    `, [user.id]);
-    
-    res.json({
-      user: userResult.rows[0],
-      token,
-      message: 'Login successful'
-    });
+    res.json(result.rows[0]);
   } catch (error: any) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Onboarding error:', error);
+    res.status(500).json({ error: 'Failed to complete onboarding' });
   }
 });
 
@@ -546,6 +571,61 @@ app.post('/api/admin/promote', requireAdmin, async (req: Request, res: Response)
   } catch (error: any) {
     console.error('Admin promotion error:', error);
     res.status(500).json({ error: 'Failed to promote user' });
+  }
+});
+
+// Update user profile (general)
+app.patch('/api/users/:id', requireAuth, validateRequest(UpdateUserSchema), async (req: Request, res: Response) => {
+  const { username, name, avatar } = req.body;
+  const userId = req.params.id;
+  const requestingUserId = (req as any).userId;
+  const isAdmin = (req as any).user?.is_admin;
+  
+  try {
+    if (userId !== requestingUserId && !isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Cannot modify other profiles' });
+    }
+    
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIdx = 1;
+    
+    if (username !== undefined) {
+      const usernameCheck = await query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, userId]);
+      if (usernameCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Username is already taken' });
+      }
+      updates.push(`username = $${paramIdx++}`);
+      values.push(username);
+    }
+    if (name !== undefined) {
+      updates.push(`name = $${paramIdx++}`);
+      values.push(name);
+    }
+    if (avatar !== undefined) {
+      updates.push(`avatar = $${paramIdx++}`);
+      values.push(avatar);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(userId);
+    
+    const result = await query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIdx} RETURNING *`,
+      values
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error: any) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
   }
 });
 

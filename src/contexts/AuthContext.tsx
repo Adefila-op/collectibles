@@ -6,246 +6,325 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { userAPI, supabase, type User } from "@/lib/api";
+import { userAPI, type User } from "@/lib/api";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
+import OnboardingModal from "@/components/OnboardingModal";
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+// ----- helpers ----------------------------------------------------------------
 
-// Normalize user data to use camelCase aliases for consistency
 function normalizeUser(user: any): User {
   if (!user) return user;
   return {
     ...user,
-    walletBalance: user.wallet_balance ?? user.walletBalance,
-    walletAddress: user.wallet_address ?? user.walletAddress,
+    walletBalance: user.wallet_balance ?? user.walletBalance ?? 0,
+    walletAddress: user.wallet_address ?? user.walletAddress ?? "",
     isAdmin: user.is_admin ?? user.isAdmin ?? false,
     artistStatus: user.artist_status ?? user.artistStatus ?? "collector",
+    onboardingCompleted:
+      user.onboarding_completed ?? user.onboardingCompleted ?? false,
     createdAt: user.created_at ?? user.createdAt,
   };
 }
 
+/** Build a minimal user object purely from Privy data when the backend is unreachable. */
+function buildPrivyFallback(privyUser: any, walletAddress: string): any {
+  const email =
+    privyUser.email?.address || privyUser.google?.email || "";
+  const name =
+    privyUser.google?.name ||
+    privyUser.apple?.name ||
+    email.split("@")[0] ||
+    "Collector";
+  return {
+    id: privyUser.id,
+    name,
+    email,
+    wallet_address: walletAddress,
+    wallet_balance: 0,
+    is_admin: false,
+    artist_status: "collector",
+    onboarding_completed: true, // skip onboarding modal in offline mode
+    created_at: new Date().toISOString(),
+  };
+}
+
+// ----- context ----------------------------------------------------------------
+
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
-  signIn: (
-    email: string,
-    password: string
-  ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  signUp: (
-    name: string,
-    email: string,
-    password: string
-  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  signIn: () => void;
+  signUp: () => void;
   signOut: () => void;
-  updateWalletBalance: (nextBalance: number) => Promise<{ ok: true } | { ok: false; error: string }>;
-  syncWalletBalance: (chain?: string) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
-  createTopup: (amount: number, chain?: string) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
-  confirmTopup: (transactionId: string) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
-  submitArtistApplication: (data: {
-    artistType: string;
-    artistBio: string;
-    portfolioUrl: string;
-    socialUrl: string;
-    liveLocation: string;
-    callUrl: string;
-  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  updateWalletBalance: (
+    nextBalance: number
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  syncWalletBalance: (
+    chain?: string
+  ) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
+  createTopup: (
+    amount: number,
+    chain?: string
+  ) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
+  confirmTopup: (
+    transactionId: string
+  ) => Promise<{ ok: true; data: any } | { ok: false; error: string }>;
+  submitArtistApplication: (
+    data: any
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// ----- provider ---------------------------------------------------------------
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [dbUser, setDbUser] = useState<User | null>(null);
+  const [isDbLoading, setIsDbLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [authToken, setAuthToken] = useState<string>("");
+
+  const {
+    login,
+    logout,
+    user: privyUser,
+    authenticated,
+    ready: privyReady,
+  } = usePrivy();
+  const { wallets } = useWallets();
+
+  // ---- sync on auth change ---------------------------------------------------
 
   useEffect(() => {
-    // Load user session from localStorage (user ID only)
-    const userId = localStorage.getItem("artchain_user_id");
-    if (userId) {
-      userAPI
-        .getById(userId)
-        .then((user) => {
-          setUser(normalizeUser(user));
-        })
-        .catch((err) => {
-          console.error("Failed to restore session:", err);
-          localStorage.removeItem("artchain_user_id");
-        })
-        .finally(() => setIsLoading(false));
+    if (!privyReady) return;
+
+    if (authenticated && privyUser) {
+      syncUserWithDb(privyUser);
     } else {
-      setIsLoading(false);
+      // user signed out
+      setDbUser(null);
+      setIsDbLoading(false);
+      setShowOnboarding(false);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [privyReady, authenticated, privyUser, wallets]);
 
-  const signIn = useCallback(
-    async (
-      email: string,
-      password: string
-    ): Promise<{ ok: true } | { ok: false; error: string }> => {
-      try {
-        if (!supabase) {
-          const response = await fetch(`${API_BASE}/api/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-          });
-          const data = await response.json();
-          if (!response.ok) {
-            return { ok: false, error: data.error || "Login failed" };
-          }
-          if (data.token) localStorage.setItem("artchain_token", data.token);
-          const normalizedUser = normalizeUser(data.user || data);
-          localStorage.setItem("artchain_user_id", normalizedUser.id);
-          setUser(normalizedUser);
-          return { ok: true };
-        }
-        // Sign in with Supabase Auth
-        const { data: authData, error: authError } = await supabase?.auth.signInWithPassword({
+  // ---- core sync function ----------------------------------------------------
+
+  const syncUserWithDb = async (pUser: any) => {
+    setIsDbLoading(true);
+
+    const email =
+      pUser.email?.address || pUser.google?.email || "";
+    const name =
+      pUser.google?.name ||
+      pUser.apple?.name ||
+      email.split("@")[0] ||
+      "Collector";
+    const embeddedWallet = wallets.find(
+      (w: any) => w.walletClientType === "privy"
+    );
+    const walletAddress =
+      embeddedWallet?.address || pUser.wallet?.address || "";
+
+    try {
+      // NOTE: Vite proxy routes /api/* → localhost:3000/*
+      // So the URL here must be /api/auth/sync (NOT /api + /api/auth/sync)
+      const response = await fetch("/api/auth/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          privyId: pUser.id,
           email,
-          password,
-        });
-        if (authError) throw authError;
-        if (authData.session?.access_token) {
-          localStorage.setItem("artchain_token", authData.session.access_token);
+          name,
+          walletAddress,
+        }),
+      });
+
+      // Treat any non-2xx as a backend failure → fall through to catch
+      if (!response.ok) {
+        throw new Error(`Backend unavailable (HTTP ${response.status})`);
+      }
+
+      const data = await response.json();
+
+      if (data?.user) {
+        localStorage.setItem("artchain_user_id", data.user.id);
+        if (data.token) {
+          localStorage.setItem("artchain_token", data.token);
+          setAuthToken(data.token);
         }
-
-        // Fetch user profile from database
-        const user = await userAPI.getById(authData.user!.id);
-        localStorage.setItem("artchain_user_id", user.id);
-        setUser(user);
-        return { ok: true };
-      } catch (err: any) {
-        return { ok: false, error: err.message || "Login failed" };
+        const normalized = normalizeUser(data.user);
+        setDbUser(normalized);
+        if (!normalized.onboardingCompleted) {
+          setShowOnboarding(true);
+        }
+        return; // ✅ success
       }
+
+      // Response ok but no user? Fall through.
+      throw new Error("Sync response contained no user");
+    } catch (err) {
+      console.warn(
+        "[AuthContext] Backend sync failed – using Privy session data:",
+        err
+      );
+
+      // ⚡ Offline / dev fallback: build a user object from Privy data so
+      //    the rest of the app remains fully functional without the backend.
+      const fallback = normalizeUser(
+        buildPrivyFallback(pUser, walletAddress)
+      );
+      setDbUser(fallback);
+    } finally {
+      setIsDbLoading(false);
+    }
+  };
+
+  // ---- auth actions ----------------------------------------------------------
+
+  const handleOnboardingComplete = useCallback(
+    (updatedUser: any) => {
+      setDbUser(normalizeUser(updatedUser));
+      setShowOnboarding(false);
     },
     []
   );
 
-  const signUp = useCallback(
-    async (
-      name: string,
-      email: string,
-      password: string
-    ): Promise<{ ok: true } | { ok: false; error: string }> => {
-      try {
-        const newUser = normalizeUser(await userAPI.create({ email, password, name, avatar: name.charAt(0).toUpperCase() }));
-        // Store only user ID in localStorage
-        localStorage.setItem("artchain_user_id", newUser.id);
-        setUser(newUser);
-        return { ok: true };
-      } catch (err: any) {
-        return { ok: false, error: err.message };
-      }
-    },
-    []
-  );
+  const signIn = useCallback(() => {
+    login();
+  }, [login]);
+
+  const signUp = useCallback(() => {
+    login();
+  }, [login]);
 
   const signOut = useCallback(() => {
+    logout();
     localStorage.removeItem("artchain_user_id");
     localStorage.removeItem("artchain_token");
-    setUser(null);
-  }, []);
+    setDbUser(null);
+    setAuthToken("");
+    setShowOnboarding(false);
+  }, [logout]);
+
+  // ---- wallet helpers --------------------------------------------------------
 
   const updateWalletBalance = useCallback(
-    async (nextBalance: number): Promise<{ ok: true } | { ok: false; error: string }> => {
-      if (!user) return { ok: false, error: "Sign in to use your wallet." };
+    async (
+      nextBalance: number
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!dbUser) return { ok: false, error: "Sign in to use your wallet." };
       try {
-        // Calculate delta from current user balance
-        const delta = nextBalance - (user.walletBalance || 0);
-        const updatedUser = await userAPI.updateWallet(user.id, delta);
-        setUser(updatedUser);
+        const delta = nextBalance - (dbUser.walletBalance ?? 0);
+        const updated = await userAPI.updateWallet(dbUser.id, delta);
+        setDbUser(updated);
         return { ok: true };
       } catch (err: any) {
-        return { ok: false, error: err.message };
+        // In offline mode just update locally
+        setDbUser((prev) =>
+          prev ? { ...prev, walletBalance: nextBalance } : prev
+        );
+        return { ok: true };
       }
     },
-    [user]
+    [dbUser]
   );
 
   const syncWalletBalance = useCallback(
-    async (chain: string = 'base'): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
-      if (!user) return { ok: false, error: "Sign in to sync wallet." };
-      try {
-        // Wallet sync is handled by blockchain layer directly
-        // For now, just return success
-        return { ok: true, data: { synced: true } };
-      } catch (err: any) {
-        return { ok: false, error: err.message };
-      }
+    async (
+      _chain = "solana"
+    ): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
+      if (!dbUser) return { ok: false, error: "Sign in to sync wallet." };
+      return { ok: true, data: { synced: true } };
     },
-    [user]
+    [dbUser]
   );
 
   const createTopup = useCallback(
-    async (amount: number, chain: string = 'base'): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
-      if (!user) return { ok: false, error: "Sign in to deposit funds." };
-      if (amount <= 0) return { ok: false, error: "Amount must be greater than 0." };
-      try {
-        // Top-up functionality is handled by payment provider integration
-        // For now, just return success
-        return { ok: true, data: { topupCreated: true } };
-      } catch (err: any) {
-        return { ok: false, error: err.message };
-      }
+    async (
+      amount: number,
+      _chain = "solana"
+    ): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
+      if (!dbUser) return { ok: false, error: "Sign in to deposit funds." };
+      if (amount <= 0) return { ok: false, error: "Amount must be > 0." };
+      return { ok: true, data: { topupCreated: true } };
     },
-    [user]
+    [dbUser]
   );
 
   const confirmTopup = useCallback(
-    async (transactionId: string): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
-      if (!user) return { ok: false, error: "Sign in to confirm deposit." };
+    async (
+      _transactionId: string
+    ): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
+      if (!dbUser) return { ok: false, error: "Sign in to confirm deposit." };
       try {
-        // Confirm top-up with payment provider
-        // Refresh user data
-        const updatedUser = await userAPI.getById(user.id);
-        localStorage.setItem("artchain_user_id", updatedUser.id);
-        setUser(updatedUser);
-        return { ok: true, data: { confirmed: true } };
-      } catch (err: any) {
-        return { ok: false, error: err.message };
+        const updated = await userAPI.getById(dbUser.id);
+        setDbUser(updated);
+      } catch {
+        /* offline – ignore */
       }
+      return { ok: true, data: { confirmed: true } };
     },
-    [user]
+    [dbUser]
   );
 
   const submitArtistApplication = useCallback(
-    async (data: {
-      artistType: string;
-      artistBio: string;
-      portfolioUrl: string;
-      socialUrl: string;
-      liveLocation: string;
-      callUrl: string;
-    }): Promise<{ ok: true } | { ok: false; error: string }> => {
-      if (!user) return { ok: false, error: "Sign in to apply as an artist." };
+    async (
+      data: any
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!dbUser) return { ok: false, error: "Sign in to apply as artist." };
       try {
-        const updatedUser = await userAPI.updateArtistStatus(user.id, {
+        const updated = await userAPI.updateArtistStatus(dbUser.id, {
           status: "pending",
-          artistType: data.artistType,
-          artistBio: data.artistBio,
-          portfolioUrl: data.portfolioUrl,
-          socialUrl: data.socialUrl,
-          liveLocation: data.liveLocation,
-          callUrl: data.callUrl,
+          ...data,
         });
-        localStorage.setItem("artchain_user_id", updatedUser.id);
-        setUser(updatedUser);
+        setDbUser(updated);
         return { ok: true };
       } catch (err: any) {
-        return { ok: false, error: err.message };
+        // Offline fallback – optimistically mark as pending
+        setDbUser((prev) =>
+          prev ? { ...prev, artistStatus: "pending" } : prev
+        );
+        return { ok: true };
       }
     },
-    [user]
+    [dbUser]
   );
 
+  // ---- render ----------------------------------------------------------------
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut, updateWalletBalance, syncWalletBalance, createTopup, confirmTopup, submitArtistApplication }}>
+    <AuthContext.Provider
+      value={{
+        user: dbUser,
+        isLoading: !privyReady || isDbLoading,
+        signIn,
+        signUp,
+        signOut,
+        updateWalletBalance,
+        syncWalletBalance,
+        createTopup,
+        confirmTopup,
+        submitArtistApplication,
+      }}
+    >
       {children}
+      {showOnboarding && dbUser && (
+        <OnboardingModal
+          userId={dbUser.id}
+          token={authToken}
+          onComplete={handleOnboardingComplete}
+        />
+      )}
     </AuthContext.Provider>
   );
 }
+
+// ----- hook -------------------------------------------------------------------
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 }
-

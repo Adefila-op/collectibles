@@ -1,16 +1,17 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import Home from "@/routes/Home";
 import ArtDetail from "@/routes/ArtDetail";
 import Checkout from "@/routes/Checkout";
 import Explore from "@/routes/Explore";
 import List from "@/routes/List";
-import Profile from "@/routes/Profile";
+import { Navigate } from "react-router-dom";
 import Swap from "@/routes/Swap";
 import Offer from "@/routes/Offer";
 import BuyArt from "@/routes/BuyArt";
 import ArtistProfile from "@/routes/ArtistProfile";
-import Admin from "@/routes/Admin";
+import CreatorDashboard from "@/routes/CreatorDashboard";
 import AdminDashboard from "@/routes/AdminDashboard";
 import SolanaCollectionDetail from "@/routes/SolanaCollectionDetail";
 
@@ -41,20 +42,44 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route path="/art/:id" element={<ArtDetail />} />
           <Route path="/artist/:slug" element={<ArtistProfile />} />
-          <Route path="/checkout/:id" element={<Checkout />} />
           <Route path="/explore" element={<Explore />} />
-          <Route path="/list" element={<List />} />
-          <Route path="/list/:artId" element={<List />} />
-          <Route path="/swap" element={<Swap />} />
-          <Route path="/offer" element={<Offer />} />
-          <Route path="/buy" element={<BuyArt />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/dipo" element={<AdminDashboard />} />
           <Route path="/solana-collection/:collection" element={<SolanaCollectionDetail />} />
+
+          {/* Authenticated Routes */}
+          <Route path="/profile" element={<Navigate to="/explore?section=settings" replace />} />
+          <Route path="/checkout/:id" element={
+            <ProtectedRoute><Checkout /></ProtectedRoute>
+          } />
+          <Route path="/list" element={
+            <ProtectedRoute><List /></ProtectedRoute>
+          } />
+          <Route path="/list/:artId" element={
+            <ProtectedRoute><List /></ProtectedRoute>
+          } />
+          <Route path="/swap" element={
+            <ProtectedRoute><Swap /></ProtectedRoute>
+          } />
+          <Route path="/offer" element={
+            <ProtectedRoute><Offer /></ProtectedRoute>
+          } />
+          <Route path="/buy" element={
+            <ProtectedRoute><BuyArt /></ProtectedRoute>
+          } />
+
+          {/* Creator Dashboard (approved artists only) */}
+          <Route path="/creator" element={
+            <ProtectedRoute requireCreator><CreatorDashboard /></ProtectedRoute>
+          } />
+
+          {/* Admin Dashboard */}
+          <Route path="/admin" element={
+            <ProtectedRoute requireAdmin><AdminDashboard /></ProtectedRoute>
+          } />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

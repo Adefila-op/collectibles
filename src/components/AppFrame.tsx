@@ -1,15 +1,107 @@
 import type { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { PhoneShell } from "./PhoneShell";
 import { BottomNav } from "./BottomNav";
-import { BrandLogo } from "./BrandLogo";
-import heroCharacter from "@/assets/hero-character.png";
-import { Instagram, Menu, ShieldCheck, Twitter } from "lucide-react";
+import PillNav from "./PillNav";
+import logo from "@/assets/collectible-logo.svg";
+import { LogOut, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { BuyArtModalDesktop } from "./modals/BuyArtModalDesktop";
 import { OfferModalDesktop } from "./modals/OfferModalDesktop";
 import { SwapModalDesktop } from "./modals/SwapModalDesktop";
 import { ListingModalDesktop } from "./modals/ListingModalDesktop";
 import { TopUpModal } from "./modals/TopUpModal";
+import { useAuth } from "@/contexts/AuthContext";
+
+function DesktopTopNav() {
+  const { user, signOut } = useAuth();
+  const location = useLocation();
+  const [listingModalOpen, setListingModalOpen] = useState(false);
+  const [buyModalOpen, setBuyModalOpen] = useState(false);
+  const [offerModalOpen, setOfferModalOpen] = useState(false);
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+
+  const navItems = [
+    { label: "Home", href: "/" },
+    { label: "Explore", href: "/explore" },
+    { label: "Swap", href: "/swap" },
+    { label: "Portfolio", href: "/explore?section=portfolio" },
+  ];
+
+  const rightSlot = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {user?.artistStatus === "approved" && (
+        <button
+          type="button"
+          onClick={() => setListingModalOpen(true)}
+          className="pill-nav-cta"
+          style={{ background: "#1a43d4", color: "#fff", gap: 6, display: "inline-flex", alignItems: "center" }}
+        >
+          <Plus size={14} />
+          List
+        </button>
+      )}
+      {user ? (
+        <>
+          <Link
+            to="/explore?section=settings"
+            className="pill-nav-avatar"
+            style={{ background: "#1a43d4", color: "#fff", fontWeight: 700, fontSize: 13, textDecoration: "none" }}
+          >
+            {user.avatar || (user.name ? user.name.slice(0, 2).toUpperCase() : "?")}
+          </Link>
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="pill-nav-ghost"
+            title="Sign out"
+            style={{ color: "#64748b", padding: "0 10px" }}
+          >
+            <LogOut size={15} />
+          </button>
+        </>
+      ) : (
+        <Link
+          to="/explore"
+          className="pill-nav-cta"
+          style={{ background: "#1a43d4", color: "#fff" }}
+        >
+          Sign In
+        </Link>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center px-6">
+          <PillNav
+            logo={logo}
+            logoAlt="COllectible"
+            items={navItems}
+            rightSlot={rightSlot}
+            baseColor="#f1f5f9"
+            pillColor="transparent"
+            hoveredPillTextColor="#1a43d4"
+            pillTextColor="#475569"
+            activePillColor="#1a43d4"
+            activePillTextColor="#ffffff"
+            initialLoadAnimation={false}
+          />
+        </div>
+      </header>
+
+      {/* Modals */}
+      <BuyArtModalDesktop open={buyModalOpen} onOpenChange={setBuyModalOpen} />
+      <OfferModalDesktop open={offerModalOpen} onOpenChange={setOfferModalOpen} onTopUpClick={() => setTopUpModalOpen(true)} />
+      <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
+      <ListingModalDesktop open={listingModalOpen} onOpenChange={setListingModalOpen} />
+      <TopUpModal open={topUpModalOpen} onOpenChange={setTopUpModalOpen} />
+    </>
+  );
+}
 
 export function AppFrame({
   children,
@@ -23,46 +115,36 @@ export function AppFrame({
   const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia("(min-width: 1024px)").matches
   );
-  const [actionMenuOpen, setActionMenuOpen] = useState(false);
-  const [buyModalOpen, setBuyModalOpen] = useState(false);
-  const [offerModalOpen, setOfferModalOpen] = useState(false);
-  const [swapModalOpen, setSwapModalOpen] = useState(false);
-  const [listingModalOpen, setListingModalOpen] = useState(false);
-  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
 
   useEffect(() => {
     const query = window.matchMedia("(min-width: 1024px)");
     const handleChange = () => setIsDesktopViewport(query.matches);
-
     handleChange();
     query.addEventListener("change", handleChange);
-
     return () => query.removeEventListener("change", handleChange);
   }, []);
 
+  // When a custom desktop layout is provided (e.g. Explore / Home)
   if (desktop) {
     return (
-      <div className="min-h-screen bg-background text-foreground lg:bg-[#0759e8]">
-        {/* Mobile view */}
+      <div className="min-h-screen bg-background text-foreground">
         {!isDesktopViewport && (
-          <div>
-            <PhoneShell label={label}>
-              <div className="flex min-h-dvh flex-col">
-                <main className="flex-1">{children}</main>
-                <BottomNav />
-              </div>
-            </PhoneShell>
-          </div>
+          <PhoneShell label={label}>
+            <div className="flex min-h-dvh flex-col">
+              <main className="flex-1">{children}</main>
+              <BottomNav />
+            </div>
+          </PhoneShell>
         )}
-        {/* Desktop view - custom layout */}
         {isDesktopViewport && <div className="min-h-screen">{desktop}</div>}
       </div>
     );
   }
 
+  // Default layout: PillNav top bar + centred content on desktop
   return (
-    <div className="min-h-screen bg-background text-foreground lg:bg-[#0759e8]">
-      {/* Mobile view */}
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Mobile */}
       <div className="lg:hidden">
         <PhoneShell label={label}>
           <div className="flex min-h-dvh flex-col">
@@ -72,116 +154,13 @@ export function AppFrame({
         </PhoneShell>
       </div>
 
-      {/* Desktop view - default sidebar layout */}
-      <div className="hidden min-h-screen grid-cols-[320px_minmax(0,1fr)] lg:grid">
-        <aside className="relative min-h-screen overflow-hidden bg-[#0b6fff] p-8 text-white shadow-[0_30px_90px_rgba(0,24,95,0.35)]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(255,255,255,0.26),transparent_15%),radial-gradient(circle_at_78%_24%,rgba(110,193,255,0.35),transparent_20%),linear-gradient(135deg,#0f7cff,#064fd1)]" />
-          <div className="absolute -right-24 bottom-8 h-80 w-80 rounded-full bg-cyan-300/20 blur-3xl" />
-          <div className="absolute left-8 top-40 grid h-14 w-14 place-items-center rounded-full bg-white/15 shadow-soft">
-            <ShieldCheck className="h-7 w-7 text-cyan-100" />
-          </div>
-
-          <div className="relative z-10 space-y-4">
-            <BrandLogo light markClassName="h-10 w-10" textClassName="font-display text-xl font-black" bgColor="bg-white/10" />
-            <div className="relative flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 text-white/85">
-                <Instagram className="h-4 w-4" />
-                <Twitter className="h-4 w-4" />
-                <ShieldCheck className="h-4 w-4" />
-              </div>
-              <button
-                type="button"
-                onClick={() => setActionMenuOpen(!actionMenuOpen)}
-                className="inline-flex items-center gap-2 rounded-full border border-white/70 px-5 py-2 text-xs font-bold text-white transition hover:bg-white hover:text-primary"
-                aria-expanded={actionMenuOpen}
-              >
-                Actions
-                <Menu className="h-4 w-4" />
-              </button>
-              {actionMenuOpen && (
-                <div className="absolute right-0 top-12 w-48 rounded-2xl bg-card border border-border shadow-lg p-2 space-y-1 z-50">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setListingModalOpen(true);
-                      setActionMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10 rounded-lg transition"
-                  >
-                    List Artwork
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBuyModalOpen(true);
-                      setActionMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10 rounded-lg transition"
-                  >
-                    Buy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOfferModalOpen(true);
-                      setActionMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10 rounded-lg transition"
-                  >
-                    Make Offer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSwapModalOpen(true);
-                      setActionMenuOpen(false);
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10 rounded-lg transition"
-                  >
-                    Swap
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="relative z-10 mt-28">
-            <div>
-              <h1 className="font-display text-5xl font-black leading-[0.95] text-white">
-                Collect Art
-                <span className="block text-cyan-200">with proof.</span>
-              </h1>
-              <div className="mt-16 text-center font-display text-lg font-black leading-tight text-white">
-                <div>Say "5/10000"</div>
-                <div>Proofed</div>
-              </div>
-            </div>
-
-            <div className="relative mt-12">
-              <div className="absolute -inset-6 rounded-full bg-cyan-200/25 blur-3xl" />
-              <img
-                src={heroCharacter}
-                alt="COllectible character holding African artwork"
-                loading="eager"
-                decoding="async"
-                className="relative z-10 mx-auto w-64 animate-float drop-shadow-[0_34px_40px_rgba(0,25,96,0.38)]"
-              />
-              <div className="absolute bottom-5 left-1/2 h-6 w-44 -translate-x-1/2 rounded-full bg-[#03245f]/50 blur-md" />
-            </div>
-          </div>
-        </aside>
-
-        <main className="min-h-screen overflow-y-auto bg-background">
+      {/* Desktop */}
+      <div className="hidden min-h-screen flex-col lg:flex">
+        <DesktopTopNav />
+        <main className="flex-1">
           <div className="mx-auto w-full max-w-5xl px-8 py-8">{children}</div>
         </main>
       </div>
-
-      {/* Desktop Modals */}
-      <BuyArtModalDesktop open={buyModalOpen} onOpenChange={setBuyModalOpen} />
-      <OfferModalDesktop open={offerModalOpen} onOpenChange={setOfferModalOpen} onTopUpClick={() => setTopUpModalOpen(true)} />
-      <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
-      <ListingModalDesktop open={listingModalOpen} onOpenChange={setListingModalOpen} />
-      <TopUpModal open={topUpModalOpen} onOpenChange={setTopUpModalOpen} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AppFrame } from "@/components/AppFrame";
-import { BrandLogo } from "@/components/BrandLogo";
+import Lightfall from "@/components/Lightfall";
+import PillNav from "@/components/PillNav";
 import { fmt } from "@/lib/art-data";
 import { artAPI, holdingsAPI } from "@/lib/api";
 import {
@@ -9,7 +10,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
+import logo from "@/assets/collectible-logo.svg";
+
 
 export default function Home() {
   const { user } = useAuth();
@@ -203,106 +207,266 @@ export default function Home() {
 }
 
 function DesktopLanding() {
+  const { user, signIn, signOut } = useAuth();
+
+  const navItems = [
+    { label: 'Explore', href: '/explore' },
+    { label: 'Artists', href: '/explore?section=artists' },
+    { label: 'Portfolio', href: '/explore?section=portfolio' },
+  ];
+
+  const rightSlot = user ? (
+    <>
+      <Link
+        to="/explore?section=settings"
+        className="pill-nav-avatar"
+        style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 13, fontWeight: 700 }}
+      >
+        {user.avatar || (user.name ? user.name.slice(0, 2).toUpperCase() : '?')}
+      </Link>
+      <Link to="/profile" className="pill-nav-cta" style={{ background: '#fff', color: '#1a43d4' }}>
+        Dashboard
+      </Link>
+      <button
+        type="button"
+        onClick={() => signOut()}
+        className="pill-nav-ghost"
+        style={{ color: 'rgba(255,255,255,0.7)' }}
+      >
+        Sign out
+      </button>
+    </>
+  ) : (
+    <>
+      <button
+        type="button"
+        onClick={() => signIn()}
+        className="pill-nav-ghost"
+        style={{ color: 'rgba(255,255,255,0.75)' }}
+      >
+        Log in
+      </button>
+      <button
+        type="button"
+        onClick={() => signIn()}
+        className="pill-nav-cta"
+        style={{ background: '#fff', color: '#1a43d4' }}
+      >
+        Get started
+      </button>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-[#1a43d4] text-white">
+    <div className="min-h-screen text-white">
       <h2 className="sr-only">COllectible landing page - buy resellable artworks directly from artists</h2>
-      <section className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#1a43d4] font-sans">
-        <div className="absolute -right-[60px] -top-20 h-[300px] w-[300px] rounded-full bg-white/[0.06]" />
-        <div className="absolute -left-10 bottom-5 h-[180px] w-[180px] rounded-full bg-white/[0.06]" />
-        <div className="absolute right-[200px] top-[60px] h-[100px] w-[100px] rounded-full bg-white/[0.06]" />
+      <section className="relative flex min-h-screen w-full flex-col overflow-hidden font-sans">
 
-        <nav className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-10 py-6">
-          <BrandLogo light markClassName="h-9 w-9" textClassName="text-[15px] font-semibold" bgColor="bg-white/10" />
-          <div className="flex items-center gap-7">
-            <Link to="/explore" className="text-[13px] text-white/65 transition hover:text-white">
-              How it works
-            </Link>
-            <Link to="/explore?section=artists" className="text-[13px] text-white/65 transition hover:text-white">
-              Artists
-            </Link>
-            <Link
-              to="/explore"
-              className="rounded-full bg-white px-[18px] py-[7px] text-[13px] font-medium text-[#1a43d4]"
-            >
-              Shop art
-            </Link>
-          </div>
-        </nav>
+        {/* ── Lightfall WebGL background ── */}
+        <div className="absolute inset-0 z-0">
+          <Lightfall
+            colors={['#8cbeff', '#1a43d4', '#0759e8', '#4fa3ff', '#ffffff']}
+            backgroundColor="#1a43d4"
+            speed={0.7}
+            streakCount={6}
+            streakWidth={1.2}
+            streakLength={1.4}
+            glow={1.2}
+            density={0.7}
+            twinkle={0.6}
+            zoom={2.5}
+            backgroundGlow={0.8}
+            opacity={1}
+            mouseInteraction={true}
+            mouseStrength={0.7}
+            mouseRadius={0.7}
+            mouseDampening={0.18}
+          />
+        </div>
 
+        {/* ── subtle dark vignette so text stays readable ── */}
+        <div className="absolute inset-0 z-[1] bg-gradient-to-b from-black/20 via-transparent to-black/40 pointer-events-none" />
+
+        {/* ── PillNav ── */}
+        <div className="relative z-50 mx-auto w-full max-w-7xl px-10 pt-6">
+          <PillNav
+            logo={logo}
+            logoAlt="COllectible"
+            items={navItems}
+            rightSlot={rightSlot}
+            baseColor="rgba(255,255,255,0.12)"
+            pillColor="rgba(255,255,255,0.18)"
+            hoveredPillTextColor="#ffffff"
+            pillTextColor="rgba(255,255,255,0.9)"
+            initialLoadAnimation={true}
+          />
+        </div>
+
+        {/* ── HERO ── */}
         <div className="relative z-10 mx-auto grid w-full max-w-7xl flex-1 grid-cols-2 items-center gap-10 px-10 py-12">
           <div>
-            <h1 className="mb-6 font-sans text-[56px] font-bold leading-[1.04] tracking-normal text-white">
+            <h1 className="mb-6 font-sans text-[56px] font-bold leading-[1.04] tracking-normal text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.35)]">
               Buy resellable
               <br />
               artworks <span className="text-[#8cbeff]">directly</span>
               <br />
               from artists
             </h1>
-            <p className="mb-2 text-base leading-[1.65] text-white/65">
+            <p className="mb-2 text-base leading-[1.65] text-white/70">
               Verified provenance. Transparent ownership.
               <br />
               Stronger resale value.
             </p>
-            <p className="mb-10 max-w-xl text-[15px] leading-[1.65] text-white/40">
+            <p className="mb-10 max-w-xl text-[15px] leading-[1.65] text-white/45">
               COllectible is the provenance infrastructure for overlooked art markets, starting with Africa.
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 relative z-50">
+              {user ? (
+                <>
+                  <Link
+                    to="/profile"
+                    className="rounded-full bg-white px-[22px] py-2.5 text-sm font-medium text-[#1a43d4] shadow-lg"
+                  >
+                    Go to Dashboard
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => signOut()}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/25 px-[18px] py-2.5 text-[13px] text-white/65 transition hover:border-white/45 hover:text-white cursor-pointer"
+                  >
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                   onClick={() => signIn()}
+                  className="rounded-full bg-white px-[22px] py-2.5 text-sm font-medium text-[#1a43d4] transition hover:opacity-90 cursor-pointer shadow-lg"
+                >
+                  Get started →
+                </button>
+              )}
               <Link
                 to="/explore"
-                className="rounded-full bg-white px-[22px] py-2.5 text-sm font-medium text-[#1a43d4]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 backdrop-blur px-[18px] py-2.5 text-[13px] text-white/80 transition hover:border-white/45 hover:text-white hover:bg-white/20"
               >
                 Shop art
-              </Link>
-              <Link
-                to="/explore"
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/25 px-[18px] py-2.5 text-[13px] text-white/65 transition hover:border-white/45 hover:text-white"
-              >
-                Learn more <span aria-hidden="true">-&gt;</span>
               </Link>
             </div>
           </div>
 
-          <div className="flex items-end justify-center">
-            <svg width="320" height="335" viewBox="0 0 220 230" role="img" aria-labelledby="landing-art-title landing-art-desc">
-              <title id="landing-art-title">Floating artwork frame with provenance certificate</title>
-              <desc id="landing-art-desc">An animated 3D-style artwork frame floating against the blue background</desc>
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-float" style={{ perspective: '1000px' }}>
+              {/* Outer glow */}
+              <div style={{
+                width: 320,
+                height: 400,
+                transform: 'rotateY(-12deg) rotateX(4deg)',
+                transformStyle: 'preserve-3d',
+                position: 'relative',
+              }}>
+                {/* Glow halo */}
+                <div style={{
+                  position: 'absolute', inset: '-24px',
+                  borderRadius: 40,
+                  background: 'radial-gradient(ellipse at 50% 50%, rgba(79,163,255,0.35) 0%, transparent 70%)',
+                  filter: 'blur(24px)',
+                  zIndex: 0,
+                }} />
 
-              <ellipse cx="110" cy="210" rx="65" ry="14" fill="rgba(0,0,0,0.18)" className="origin-center animate-pulse" />
+                {/* Card body */}
+                <div style={{
+                  position: 'relative', zIndex: 1,
+                  width: '100%', height: '100%',
+                  borderRadius: 24,
+                  background: 'linear-gradient(145deg, rgba(15,26,80,0.85) 0%, rgba(10,18,60,0.95) 100%)',
+                  border: '1.5px solid rgba(140,190,255,0.25)',
+                  boxShadow: '0 8px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)',
+                  backdropFilter: 'blur(12px)',
+                  overflow: 'hidden',
+                  display: 'flex', flexDirection: 'column',
+                  padding: 16,
+                  gap: 12,
+                }}>
+                  {/* Gold top border accent */}
+                  <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+                    background: 'linear-gradient(90deg, transparent, #c9a96e, #e8c97e, #c9a96e, transparent)',
+                  }} />
 
-              <g className="origin-center animate-float">
-                <rect x="30" y="20" width="130" height="160" rx="6" fill="#1a2a6e" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
-                <rect x="38" y="28" width="114" height="138" rx="4" fill="#0f1a50" />
+                  {/* Artwork area */}
+                  <div style={{
+                    flex: 1, borderRadius: 14,
+                    background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 30%, #312e81 55%, #1e3a8a 80%, #0c4a6e 100%)',
+                    position: 'relative', overflow: 'hidden',
+                    minHeight: 240,
+                  }}>
+                    {/* African geometric pattern overlay */}
+                    <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.7 }} viewBox="0 0 288 240" preserveAspectRatio="xMidYMid slice">
+                      <polygon points="0,0 144,120 288,0" fill="rgba(79,163,255,0.15)" />
+                      <polygon points="0,240 144,120 288,240" fill="rgba(147,51,234,0.2)" />
+                      <rect x="80" y="40" width="128" height="3" fill="rgba(56,189,248,0.3)" rx="2" />
+                      <rect x="80" y="197" width="128" height="3" fill="rgba(56,189,248,0.3)" rx="2" />
+                      <rect x="40" y="80" width="3" height="80" fill="rgba(168,85,247,0.25)" rx="2" />
+                      <rect x="245" y="80" width="3" height="80" fill="rgba(168,85,247,0.25)" rx="2" />
+                      <circle cx="144" cy="120" r="48" fill="none" stroke="rgba(56,189,248,0.25)" strokeWidth="1.5" />
+                      <circle cx="144" cy="120" r="26" fill="none" stroke="rgba(232,121,249,0.3)" strokeWidth="1" />
+                      <polygon points="144,80 168,132 120,132" fill="rgba(56,189,248,0.3)" />
+                      <polygon points="144,160 168,108 120,108" fill="rgba(147,51,234,0.25)" />
+                    </svg>
+                    {/* Shine sweep */}
+                    <div style={{
+                      position: 'absolute', top: 0, left: '-60%', width: '40%', height: '100%',
+                      background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.12) 50%, transparent 60%)',
+                      animation: 'shine 4s ease-in-out infinite',
+                    }} />
+                  </div>
 
-                <rect x="44" y="34" width="102" height="126" rx="3" fill="#2a1a0e" />
-                <ellipse cx="95" cy="72" rx="28" ry="34" fill="#8B4513" opacity="0.7" />
-                <ellipse cx="95" cy="62" rx="18" ry="20" fill="#D2691E" />
-                <circle cx="88" cy="56" r="3" fill="#1a0a00" />
-                <circle cx="102" cy="56" r="3" fill="#1a0a00" />
-                <path d="M88 65 Q95 70 102 65" stroke="#1a0a00" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-                <ellipse cx="95" cy="108" rx="22" ry="26" fill="#8B4513" opacity="0.5" />
-                <rect x="72" y="96" width="46" height="36" rx="2" fill="#D2691E" opacity="0.6" />
+                  {/* Card footer */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 2px' }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.9)', letterSpacing: '0.3px' }}>African Abstract #042</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>by Kolade Ade</div>
+                    </div>
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(79,163,255,0.25), rgba(26,67,212,0.35))',
+                      border: '1px solid rgba(140,190,255,0.3)',
+                      borderRadius: 20, padding: '5px 12px',
+                      fontSize: 11, fontWeight: 700, color: '#8cbeff',
+                    }}>₦ 420,000</div>
+                  </div>
+                </div>
 
-                <rect x="44" y="34" width="102" height="126" rx="3" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
-
-                <rect x="38" y="168" width="114" height="16" rx="2" fill="#c9a96e" />
-                <rect x="42" y="169" width="106" height="2" rx="1" fill="rgba(255,255,255,0.3)" />
-                <rect x="38" y="182" width="114" height="4" rx="1" fill="#b8924a" />
-              </g>
-
-              <g className="animate-float" transform="translate(140, 80)">
-                <rect x="0" y="0" width="72" height="44" rx="8" fill="rgba(255,255,255,0.95)" />
-                <circle cx="18" cy="14" r="8" fill="#1a43d4" />
-                <text x="18" y="18" textAnchor="middle" fontSize="9" fill="#fff" fontWeight="700">OK</text>
-                <rect x="30" y="8" width="34" height="3" rx="1" fill="#1a43d4" opacity="0.7" />
-                <rect x="30" y="14" width="24" height="2" rx="1" fill="#888" opacity="0.5" />
-                <rect x="8" y="28" width="56" height="2" rx="1" fill="#eee" />
-                <rect x="8" y="33" width="40" height="2" rx="1" fill="#eee" />
-              </g>
-            </svg>
+                {/* Verified badge floating below */}
+                <div style={{
+                  position: 'absolute', bottom: -22, left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'rgba(255,255,255,0.92)',
+                  backdropFilter: 'blur(8px)',
+                  borderRadius: 30, padding: '6px 16px',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                  whiteSpace: 'nowrap',
+                }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: '50%',
+                    background: '#1a43d4',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 5l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1a2060' }}>Verified on-chain</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="relative z-10 border-t border-white/10">
+        {/* ── STATS BAR ── */}
+        <div className="relative z-10 border-t border-white/10 bg-black/20 backdrop-blur-sm">
           <div className="mx-auto flex w-full max-w-7xl">
             {[
               ["2,400+", "Artworks"],
@@ -321,3 +485,4 @@ function DesktopLanding() {
     </div>
   );
 }
+

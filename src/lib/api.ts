@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://tezhvgyffjvfwricgohv.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlemh2Z3lmZmp2ZndyaWNnb2h2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NDExNDMsImV4cCI6MjA5NzQxNzE0M30.dF6d2iNBM24vJi72wPcGj32Yfi8JMfD4gbnnDPcsffQ';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -75,6 +75,7 @@ function addArtAliases(art: any): any {
 export interface User {
   id: string;
   email: string;
+  username?: string;
   name: string;
   avatar: string;
   wallet_balance: number;
@@ -87,6 +88,7 @@ export interface User {
   social_url?: string;
   live_location?: string;
   call_url?: string;
+  onboarding_completed?: boolean;
   created_at: string;
   
   // Aliases for backward compatibility
@@ -94,6 +96,7 @@ export interface User {
   walletAddress?: string;
   isAdmin?: boolean;
   artistStatus?: 'collector' | 'pending' | 'approved';
+  onboardingCompleted?: boolean;
   createdAt?: string;
 }
 
@@ -305,6 +308,21 @@ export const userAPI = {
     // For user self-updates, use Supabase
     const { data: updatedUser, error } = await getSupabase().from('users')
       .update(statusData)
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return addUserAliases(updatedUser);
+  },
+  update: async (userId: string, data: Partial<User>) => {
+    if (!supabase) {
+      return addUserAliases(await fetchAPI(`/api/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }));
+    }
+    const { data: updatedUser, error } = await getSupabase().from('users')
+      .update(data)
       .eq('id', userId)
       .select()
       .single();
