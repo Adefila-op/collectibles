@@ -458,7 +458,7 @@ app.put('/api/users/:id/password', requireAuth, async (req: Request, res: Respon
 // Update User Avatar
 app.post('/api/users/:id/avatar', requireAuth, async (req: Request, res: Response) => {
   const { imageBase64 } = req.body;
-  const userId = req.params.id;
+  const userId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const requestingUserId = (req as any).userId;
   
   try {

@@ -274,14 +274,6 @@ export const userAPI = {
     if (error) throw error;
     return addUserAliases(data);
   },
-  update: async (id: string, data: Partial<User>) => {
-    const resData = await fetchAPI(`/users/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    return addUserAliases(resData);
-  },
-
   updateAvatar: async (id: string, imageBase64: string) => {
     const resData = await fetchAPI(`/users/${id}/avatar`, {
       method: 'POST',
