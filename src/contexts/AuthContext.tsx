@@ -7,8 +7,8 @@ import {
   type ReactNode,
 } from "react";
 import { userAPI, type User } from "@/lib/api";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
 import OnboardingModal from "@/components/OnboardingModal";
+import AuthModal from "@/components/AuthModal";
 
 // ----- helpers ----------------------------------------------------------------
 
@@ -20,31 +20,13 @@ function normalizeUser(user: any): User {
     walletAddress: user.wallet_address ?? user.walletAddress ?? "",
     isAdmin: user.is_admin ?? user.isAdmin ?? false,
     artistStatus: user.artist_status ?? user.artistStatus ?? "collector",
+    userType: user.user_type ?? user.userType ?? "collector",
+    firstName: user.first_name ?? user.firstName ?? "",
+    lastName: user.last_name ?? user.lastName ?? "",
+    gender: user.gender ?? "",
     onboardingCompleted:
       user.onboarding_completed ?? user.onboardingCompleted ?? false,
     createdAt: user.created_at ?? user.createdAt,
-  };
-}
-
-/** Build a minimal user object purely from Privy data when the backend is unreachable. */
-function buildPrivyFallback(privyUser: any, walletAddress: string): any {
-  const email =
-    privyUser.email?.address || privyUser.google?.email || "";
-  const name =
-    privyUser.google?.name ||
-    privyUser.apple?.name ||
-    email.split("@")[0] ||
-    "Collector";
-  return {
-    id: privyUser.id,
-    name,
-    email,
-    wallet_address: walletAddress,
-    wallet_balance: 0,
-    is_admin: false,
-    artist_status: "collector",
-    onboarding_completed: true, // skip onboarding modal in offline mode
-    created_at: new Date().toISOString(),
   };
 }
 
@@ -84,104 +66,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [authToken, setAuthToken] = useState<string>("");
 
-  const {
-    login,
-    logout,
-    user: privyUser,
-    authenticated,
-    ready: privyReady,
-  } = usePrivy();
-  const { wallets } = useWallets();
-
-  // ---- sync on auth change ---------------------------------------------------
+  const [authModalState, setAuthModalState] = useState<{
+    isOpen: boolean;
+    defaultView: "login" | "register";
+  }>({ isOpen: false, defaultView: "login" });
 
   useEffect(() => {
-    if (!privyReady) return;
+    // Attempt to load user from localStorage token
+    const token = localStorage.getItem("artchain_token");
+    const userId = localStorage.getItem("artchain_user_id");
 
-    if (authenticated && privyUser) {
-      syncUserWithDb(privyUser);
+    if (token && userId) {
+      setAuthToken(token);
+      loadUser(userId);
     } else {
-      // user signed out
-      setDbUser(null);
       setIsDbLoading(false);
-      setShowOnboarding(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [privyReady, authenticated, privyUser, wallets]);
+  }, []);
 
-  // ---- core sync function ----------------------------------------------------
-
-  const syncUserWithDb = async (pUser: any) => {
-    setIsDbLoading(true);
-
-    const email =
-      pUser.email?.address || pUser.google?.email || "";
-    const name =
-      pUser.google?.name ||
-      pUser.apple?.name ||
-      email.split("@")[0] ||
-      "Collector";
-    const embeddedWallet = wallets.find(
-      (w: any) => w.walletClientType === "privy"
-    );
-    const walletAddress =
-      embeddedWallet?.address || pUser.wallet?.address || "";
-
+  const loadUser = async (userId: string) => {
     try {
-      // NOTE: Vite proxy routes /api/* → localhost:3000/*
-      // So the URL here must be /api/auth/sync (NOT /api + /api/auth/sync)
-      const response = await fetch("/api/auth/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          privyId: pUser.id,
-          email,
-          name,
-          walletAddress,
-        }),
-      });
-
-      // Treat any non-2xx as a backend failure → fall through to catch
-      if (!response.ok) {
-        throw new Error(`Backend unavailable (HTTP ${response.status})`);
+      setIsDbLoading(true);
+      const user = await userAPI.getById(userId);
+      const normalized = normalizeUser(user);
+      setDbUser(normalized);
+      if (!normalized.onboardingCompleted) {
+        setShowOnboarding(true);
       }
-
-      const data = await response.json();
-
-      if (data?.user) {
-        localStorage.setItem("artchain_user_id", data.user.id);
-        if (data.token) {
-          localStorage.setItem("artchain_token", data.token);
-          setAuthToken(data.token);
-        }
-        const normalized = normalizeUser(data.user);
-        setDbUser(normalized);
-        if (!normalized.onboardingCompleted) {
-          setShowOnboarding(true);
-        }
-        return; // ✅ success
-      }
-
-      // Response ok but no user? Fall through.
-      throw new Error("Sync response contained no user");
     } catch (err) {
-      console.warn(
-        "[AuthContext] Backend sync failed – using Privy session data:",
-        err
-      );
-
-      // ⚡ Offline / dev fallback: build a user object from Privy data so
-      //    the rest of the app remains fully functional without the backend.
-      const fallback = normalizeUser(
-        buildPrivyFallback(pUser, walletAddress)
-      );
-      setDbUser(fallback);
+      console.error("Failed to load user session", err);
+      signOut(); // clear invalid state
     } finally {
       setIsDbLoading(false);
     }
   };
 
-  // ---- auth actions ----------------------------------------------------------
+  const handleAuthSuccess = (data: any) => {
+    if (data?.user && data?.token) {
+      localStorage.setItem("artchain_user_id", data.user.id);
+      localStorage.setItem("artchain_token", data.token);
+      setAuthToken(data.token);
+      const normalized = normalizeUser(data.user);
+      setDbUser(normalized);
+      if (!normalized.onboardingCompleted) {
+        setShowOnboarding(true);
+      }
+      setAuthModalState({ isOpen: false, defaultView: "login" });
+    }
+  };
 
   const handleOnboardingComplete = useCallback(
     (updatedUser: any) => {
@@ -192,21 +124,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signIn = useCallback(() => {
-    login();
-  }, [login]);
+    setAuthModalState({ isOpen: true, defaultView: "login" });
+  }, []);
 
   const signUp = useCallback(() => {
-    login();
-  }, [login]);
+    setAuthModalState({ isOpen: true, defaultView: "register" });
+  }, []);
 
   const signOut = useCallback(() => {
-    logout();
     localStorage.removeItem("artchain_user_id");
     localStorage.removeItem("artchain_token");
     setDbUser(null);
     setAuthToken("");
     setShowOnboarding(false);
-  }, [logout]);
+    window.location.href = "/";
+  }, []);
 
   // ---- wallet helpers --------------------------------------------------------
 
@@ -233,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const syncWalletBalance = useCallback(
     async (
-      _chain = "solana"
+      _chain = "native"
     ): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
       if (!dbUser) return { ok: false, error: "Sign in to sync wallet." };
       return { ok: true, data: { synced: true } };
@@ -244,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const createTopup = useCallback(
     async (
       amount: number,
-      _chain = "solana"
+      _chain = "native"
     ): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
       if (!dbUser) return { ok: false, error: "Sign in to deposit funds." };
       if (amount <= 0) return { ok: false, error: "Amount must be > 0." };
@@ -298,7 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user: dbUser,
-        isLoading: !privyReady || isDbLoading,
+        isLoading: isDbLoading,
         signIn,
         signUp,
         signOut,
@@ -317,6 +249,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           onComplete={handleOnboardingComplete}
         />
       )}
+      <AuthModal
+        isOpen={authModalState.isOpen}
+        defaultView={authModalState.defaultView}
+        onClose={() => setAuthModalState({ ...authModalState, isOpen: false })}
+        onSuccess={handleAuthSuccess}
+      />
     </AuthContext.Provider>
   );
 }

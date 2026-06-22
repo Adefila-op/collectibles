@@ -45,10 +45,10 @@ import {
   UserRound,
   Wallet,
   LogOut,
+  MailOpen,
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePrivy } from "@privy-io/react-auth";
 import { type UserHolding } from "@/lib/db";
 import { BuyArtModal } from "@/components/modals/BuyArtModal";
 import { BuyArtModalDesktop } from "@/components/modals/BuyArtModalDesktop";
@@ -56,7 +56,7 @@ import { OfferModal } from "@/components/modals/OfferModal";
 import { OfferModalDesktop } from "@/components/modals/OfferModalDesktop";
 import { SwapModal } from "@/components/modals/SwapModal";
 import { SwapModalDesktop } from "@/components/modals/SwapModalDesktop";
-import { AuthModal } from "@/components/AuthModal";
+import AuthModal from "@/components/AuthModal";
 import { TransactionModal } from "@/components/modals/TransactionModal";
 import { ListingModalDesktop } from "@/components/modals/ListingModalDesktop";
 import { TopUpModal } from "@/components/modals/TopUpModal";
@@ -78,11 +78,11 @@ function walletAddressForUser(userId: string) {
 }
 
 export default function Explore() {
-  const { user, isLoading, signOut, updateWalletBalance, submitArtistApplication } = useAuth();
-  const { login } = usePrivy();
+  const { user, isLoading, signIn, signOut, updateWalletBalance, submitArtistApplication } = useAuth();
   const location = useLocation();
   const initialSection = new URLSearchParams(location.search).get("section");
   const [showFilters, setShowFilters] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
@@ -341,10 +341,7 @@ export default function Explore() {
 
   const modals = (
     <>
-      <AuthModal
-        open={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-      />
+
       <BuyArtModalDesktop open={buyModalOpen} onOpenChange={setBuyModalOpen} />
       <OfferModalDesktop open={offerModalOpen} onOpenChange={setOfferModalOpen} artId={offerArtId} onTopUpClick={handleTopUpClick} />
       <SwapModalDesktop open={swapModalOpen} onOpenChange={setSwapModalOpen} />
@@ -395,8 +392,8 @@ export default function Explore() {
           <div className="dash-gate-inner">
             <UserRound size={40} />
             <h2>Sign in to explore the marketplace</h2>
-            <p>Connect with your email or Google to discover and collect artworks.</p>
-            <button className="dash-gate-btn" onClick={() => login()}>Sign In</button>
+            <p>Sign in with your email and password to discover and collect artworks.</p>
+            <button className="dash-gate-btn" onClick={() => signIn()}>Sign In</button>
           </div>
         </div>
       </AppFrame>
@@ -452,6 +449,8 @@ export default function Explore() {
               onListOpenSeaHolding={handleListOpenSeaHolding}
               onOfferOpenSeaHolding={handleOfferOpenSeaHolding}
               onSignOut={signOut}
+              showNotifications={showNotifications}
+              setShowNotifications={setShowNotifications}
             />
           </>
         }
@@ -834,6 +833,8 @@ function DesktopMarketplace({
   onListOpenSeaHolding,
   onOfferOpenSeaHolding,
   onSignOut,
+  showNotifications,
+  setShowNotifications,
 }: {
   artworks: Art[];
   allArtworks: Art[];
@@ -874,6 +875,8 @@ function DesktopMarketplace({
   onListOpenSeaHolding: (listingId: string) => void;
   onOfferOpenSeaHolding: (listingId: string) => void;
   onSignOut: () => void;
+  showNotifications: boolean;
+  setShowNotifications: (val: boolean) => void;
 }) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositMethod, setDepositMethod] = useState<"crypto" | "card">("crypto");
@@ -1098,13 +1101,60 @@ function DesktopMarketplace({
               />
             </div>
             <div className="ml-auto flex items-center gap-5">
-              <button className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm">
-                <Bell className="h-5 w-5" />
-              </button>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm relative hover:bg-slate-50 transition"
+                >
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute top-3 right-3 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white"></span>
+                </button>
+
+                {showNotifications && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowNotifications(false)}
+                    />
+                    <div className="absolute right-0 mt-3 w-80 rounded-[24px] bg-white p-4 shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 z-50 animate-in fade-in slide-in-from-top-4">
+                      <div className="flex items-center justify-between mb-4 px-2">
+                        <h3 className="font-semibold text-slate-800">Notifications</h3>
+                        <button className="text-xs text-primary font-medium hover:underline">Mark all read</button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition cursor-pointer">
+                          <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                            <MailOpen size={16} />
+                          </div>
+                          <div>
+                            <p className="text-sm text-slate-700"><span className="font-semibold">System</span> welcome to COllectible!</p>
+                            <span className="text-xs text-slate-400">Just now</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-3 p-2 rounded-xl hover:bg-slate-50 transition cursor-pointer opacity-70">
+                          <div className="h-10 w-10 shrink-0 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                            <ShieldCheck size={16} />
+                          </div>
+                          <div>
+                            <p className="text-sm text-slate-700">Your account was successfully verified.</p>
+                            <span className="text-xs text-slate-400">2 hours ago</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <button className="w-full text-center text-xs font-medium text-slate-500 hover:text-slate-700 mt-4 pt-3 border-t border-slate-100">
+                        View past notifications
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={onListArtClick}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary-grad px-6 py-3 text-sm font-semibold text-white shadow-glow"
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary-grad px-6 py-3 text-sm font-semibold text-white shadow-glow hover:opacity-90 transition"
               >
                 List Your Art <Plus className="h-4 w-4" />
               </button>
@@ -1550,7 +1600,7 @@ function DesktopMarketplace({
                 />
                 <span className="text-xs font-semibold text-slate-500">USDC</span>
               </div>
-              <div className="mt-1 text-xs text-slate-500">Credits {fmt(depositNaira)}</div>
+              <div className="mt-1 text-xs font-semibold text-slate-500">Credits {fmt(depositNaira)}</div>
             </div>
 
             {depositMessage && (

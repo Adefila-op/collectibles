@@ -22,9 +22,14 @@ export default function ProtectedRoute({ children, requireAdmin, requireCreator 
         navigate("/");
         return;
       }
-      if (requireCreator && user.artistStatus !== "approved") {
-        navigate("/profile");
-        return;
+      // For creator routes: allow if user_type is 'creator' (even if pending)
+      // The CreatorDashboard itself handles showing the pending gate
+      if (requireCreator) {
+        const userType = user.userType ?? user.user_type;
+        if (userType !== "creator") {
+          navigate("/explore");
+          return;
+        }
       }
     }
   }, [user, isLoading, requireAdmin, requireCreator, navigate]);
@@ -42,7 +47,10 @@ export default function ProtectedRoute({ children, requireAdmin, requireCreator 
 
   if (!user) return null;
   if (requireAdmin && !user.isAdmin) return null;
-  if (requireCreator && user.artistStatus !== "approved") return null;
+  if (requireCreator) {
+    const userType = user.userType ?? user.user_type;
+    if (userType !== "creator") return null;
+  }
 
   return <>{children}</>;
 }

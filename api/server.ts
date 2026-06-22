@@ -65,25 +65,6 @@ import {
   fetchOpenSeaListings,
   getOpenSeaFulfillmentData,
 } from './opensea-service';
-import {
-  generateSolanaKeypair,
-  getSolanaBalance,
-  getSolanaBalanceFormatted,
-  isValidSolanaAddress,
-} from './solana-wallet';
-import {
-  fetchSolanaNFTListings,
-  getSolanaNFTDetails,
-  getSolanaNFTWithCachedImage,
-  searchSolanaNFTs,
-} from './solana-nft-service';
-import {
-  cacheImage,
-  getImageFromCache,
-  cleanupOldImages,
-  getCacheStats,
-  clearCache,
-} from './image-cache';
 
 // Extend Express Request type to include custom properties
 declare global {
@@ -187,7 +168,11 @@ async function ensureRuntimeSchema() {
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false,
         ADD COLUMN IF NOT EXISTS privy_id VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS username VARCHAR(50) UNIQUE,
+        ADD COLUMN IF NOT EXISTS username VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS first_name VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS last_name VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS gender VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS user_type VARCHAR(20) DEFAULT 'collector',
         ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false
     `);
     
@@ -244,167 +229,6 @@ app.post('/api/opensea/fulfillment-data', requireAuth, async (req: Request, res:
   }
 });
 
-// ========== Solana NFT API ==========
-
-// Get Solana NFT listings
-app.get('/api/solana/nfts/listings', async (req: Request, res: Response) => {
-  try {
-    const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
-    const listings = await fetchSolanaNFTListings(limit);
-    
-    // Cache images for all listings
-    const listingsWithCachedImages = await Promise.all(
-      listings.map(nft => getSolanaNFTWithCachedImage(nft))
-    );
-    
-    res.json({ listings: listingsWithCachedImages });
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Unable to fetch Solana NFT listings',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
-// Get specific Solana NFT details
-app.get('/api/solana/nfts/:contractAddress/:tokenId', async (req: Request, res: Response) => {
-  try {
-    const { contractAddress, tokenId } = req.params as { contractAddress: string; tokenId: string };
-    
-    if (!contractAddress || !tokenId) {
-      return res.status(400).json({ error: 'Missing contractAddress or tokenId' });
-    }
-
-    const nft = await getSolanaNFTDetails(contractAddress, tokenId);
-    
-    if (!nft) {
-      return res.status(404).json({ error: 'NFT not found' });
-    }
-
-    res.json({ nft });
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Unable to fetch NFT details',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
-// Search Solana NFTs
-app.get('/api/solana/nfts/search', async (req: Request, res: Response) => {
-  try {
-    const query = req.query.q as string;
-    const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
-
-    if (!query) {
-      return res.status(400).json({ error: 'Search query required' });
-    }
-
-    const results = await searchSolanaNFTs(query, limit);
-    
-    // Cache images
-    const resultsWithCachedImages = await Promise.all(
-      results.map(nft => getSolanaNFTWithCachedImage(nft))
-    );
-
-    res.json({ results: resultsWithCachedImages });
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Search failed',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
-// ========== Image Cache API ==========
-
-// Cache an image and get local URL
-app.post('/api/images/cache', async (req: Request, res: Response) => {
-  try {
-    const { imageUrl } = req.body;
-
-    if (!imageUrl) {
-      return res.status(400).json({ error: 'Image URL required' });
-    }
-
-    const cachedUrl = await getImageFromCache(imageUrl);
-    res.json({ cachedUrl, originalUrl: imageUrl });
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Failed to cache image',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
-// Get image cache statistics (admin only)
-app.get('/api/images/cache/stats', requireAuth, requireAdmin, (req: Request, res: Response) => {
-  try {
-    const stats = getCacheStats();
-    res.json(stats);
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Failed to get cache stats',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
-// Clear image cache (admin only)
-app.delete('/api/images/cache', requireAuth, requireAdmin, (req: Request, res: Response) => {
-  try {
-    clearCache();
-    res.json({ message: 'Cache cleared successfully' });
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Failed to clear cache',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
-// ========== Solana Wallet API ==========
-
-// Create Solana wallet
-app.post('/api/solana/wallet/create', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { publicKey, privateKey } = generateSolanaKeypair();
-
-    res.json({
-      success: true,
-      wallet: {
-        address: publicKey,
-        // Note: Private key should never be returned in production
-        // Store securely in database or hardware wallet
-      },
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Failed to create Solana wallet',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
-// Get Solana wallet balance
-app.get('/api/solana/wallet/:address/balance', async (req: Request, res: Response) => {
-  try {
-    const { address } = req.params as { address: string };
-
-    if (!isValidSolanaAddress(address)) {
-      return res.status(400).json({ error: 'Invalid Solana address' });
-    }
-
-    const balanceInfo = await getSolanaBalanceFormatted(address);
-    res.json(balanceInfo);
-  } catch (error: any) {
-    res.status(500).json({
-      error: 'Failed to fetch balance',
-      detail: error?.message || 'Unknown error',
-    });
-  }
-});
-
 // ========== Users API ==========
 
 // Get all users (admin only) - explicit columns, no passwords
@@ -453,59 +277,107 @@ app.get('/api/users/:id', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Sync Privy User (register/login)
-const ADMIN_EMAILS = ['admin@example.com']; // Hardcoded admins
+// Standard Authentication (Register)
+const ADMIN_EMAILS = ['admin@example.com', 'admin@admin.com']; // Hardcoded admins
 
-app.post('/api/auth/sync', async (req: Request, res: Response) => {
-  const { privyId, email, name, walletAddress } = req.body;
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  const { email, password, name, firstName, lastName, username, gender, userType } = req.body;
   try {
-    if (!privyId) {
-      return res.status(400).json({ error: 'Missing privyId' });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Missing email or password' });
+    }
+    if (!firstName || !lastName) {
+      return res.status(400).json({ error: 'First name and last name are required' });
+    }
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
     }
 
-    // Check if user exists by privy_id or email
-    let result = await query('SELECT * FROM users WHERE privy_id = $1 OR email = $2 LIMIT 1', [privyId, email]);
-    let user;
+    // Check if user exists by email
+    const result = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);
     
+    if (result.rows.length > 0) {
+      return res.status(400).json({ error: 'User already exists with this email' });
+    }
+
+    // Check if username is taken
+    const usernameCheck = await query('SELECT id FROM users WHERE username = $1 LIMIT 1', [username]);
+    if (usernameCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Username is already taken' });
+    }
+
     const isAdmin = ADMIN_EMAILS.includes(email);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const fullName = name || `${firstName} ${lastName}`.trim();
+    const resolvedUserType = userType || 'collector';
+    // Creators start as 'pending' artist_status; collectors start as 'collector'
+    const artistStatus = resolvedUserType === 'creator' ? 'pending' : 'collector';
+    const avatarInitials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 
-    if (result.rows.length === 0) {
-      // Create new user
-      const insertResult = await query(
-        `INSERT INTO users (email, password, name, avatar, wallet_balance, wallet_address, artist_status, privy_id, is_admin, onboarding_completed)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         RETURNING 
-           id, email, username, name, avatar, wallet_balance, wallet_address, 
-           artist_status, is_admin, onboarding_completed, created_at, updated_at`,
-        [email || privyId, 'privy_managed', name || '', name?.charAt(0)?.toUpperCase() || 'U', 0, walletAddress || null, 'collector', privyId, isAdmin, false]
-      );
-      user = insertResult.rows[0];
-    } else {
-      user = result.rows[0];
-      // Update privy_id, walletAddress, and admin status if they changed
-      if (user.privy_id !== privyId || user.wallet_address !== walletAddress || user.is_admin !== isAdmin) {
-        const updateResult = await query(
-          `UPDATE users SET privy_id = $1, wallet_address = COALESCE($2, wallet_address), is_admin = $3 WHERE id = $4
-           RETURNING 
-             id, email, username, name, avatar, wallet_balance, wallet_address, 
-             artist_status, is_admin, onboarding_completed, created_at, updated_at`,
-          [privyId, walletAddress, isAdmin, user.id]
-        );
-        user = updateResult.rows[0];
-      }
-    }
+    // Create new user
+    const insertResult = await query(
+      `INSERT INTO users (email, password, name, first_name, last_name, username, gender, user_type, avatar, wallet_balance, artist_status, is_admin, onboarding_completed)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING 
+         id, email, username, name, first_name, last_name, gender, user_type, avatar, wallet_balance, wallet_address, 
+         artist_status, is_admin, onboarding_completed, created_at, updated_at`,
+      [email, hashedPassword, fullName, firstName, lastName, username, gender || null, resolvedUserType, avatarInitials, 0, artistStatus, isAdmin, false]
+    );
     
-    // Create JWT for existing routes that still expect it (or use Privy's token)
+    const user = insertResult.rows[0];
     const token = generateToken(user.id, user.email);
     
     res.json({
       user,
       token,
-      message: 'Sync successful'
+      message: 'Registration successful'
     });
   } catch (error: any) {
-    console.error('Auth sync error:', error);
-    res.status(500).json({ error: 'Auth sync failed' });
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// Standard Authentication (Login)
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  try {
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Missing email or password' });
+    }
+
+    const result = await query('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
+    
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch && user.password !== 'privy_managed') {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // In case they had privy_managed and are now using native password, they can't login, they should reset but for now this works.
+    if (!isMatch && user.password === 'privy_managed') {
+      return res.status(401).json({ error: 'Please sign up again with email and password to migrate your account.' });
+    }
+    
+    // Create JWT
+    const token = generateToken(user.id, user.email);
+    
+    // Remove password from returned user object
+    const { password: _, ...userWithoutPassword } = user;
+    
+    res.json({
+      user: userWithoutPassword,
+      token,
+      message: 'Login successful'
+    });
+  } catch (error: any) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
@@ -546,6 +418,81 @@ app.post('/api/users/:id/onboard', requireAuth, async (req: Request, res: Respon
   } catch (error: any) {
     console.error('Onboarding error:', error);
     res.status(500).json({ error: 'Failed to complete onboarding' });
+  }
+});
+
+// Update User Password
+app.put('/api/users/:id/password', requireAuth, async (req: Request, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+  const userId = req.params.id;
+  const requestingUserId = (req as any).userId;
+  
+  try {
+    if (userId !== requestingUserId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot update password for another user' });
+    }
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    const userRes = await query('SELECT password FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, userRes.rows[0].password);
+    if (!isMatch && userRes.rows[0].password !== 'privy_managed') {
+      return res.status(401).json({ error: 'Incorrect current password' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await query('UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [hashedPassword, userId]);
+    
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Password update error:', error);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+});
+
+// Update User Avatar
+app.post('/api/users/:id/avatar', requireAuth, async (req: Request, res: Response) => {
+  const { imageBase64 } = req.body;
+  const userId = req.params.id;
+  const requestingUserId = (req as any).userId;
+  
+  try {
+    if (userId !== requestingUserId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot update avatar for another user' });
+    }
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'No image provided' });
+    }
+
+    const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ error: 'Invalid base64 format' });
+    }
+    const type = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    const ext = type.split('/')[1];
+
+    const { publicUrl } = await uploadArtworkImage(userId, `avatar.${ext}`, buffer, type);
+
+    const result = await query(
+      `UPDATE users SET avatar = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
+      [publicUrl, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { password: _, ...userWithoutPassword } = result.rows[0];
+    res.json(userWithoutPassword);
+  } catch (error) {
+    console.error('Avatar update error:', error);
+    res.status(500).json({ error: 'Failed to update avatar' });
   }
 });
 
@@ -2957,6 +2904,23 @@ async function startServer() {
     await ensureRuntimeSchema().catch((error) => {
       console.error('Runtime schema check failed:', error);
     });
+
+    // Seed admin user
+    try {
+      const adminEmail = 'admin@admin.com';
+      const adminResult = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [adminEmail]);
+      if (adminResult.rows.length === 0) {
+        const hashedPassword = await bcrypt.hash('Admin123', 10);
+        await query(
+          `INSERT INTO users (email, password, name, first_name, last_name, username, user_type, is_admin, artist_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [adminEmail, hashedPassword, 'System Admin', 'System', 'Admin', 'admin', 'collector', true, 'collector']
+        );
+        console.log('✅ Seeded admin user: admin@admin.com');
+      }
+    } catch (e) {
+      console.error('Admin seeding failed:', e);
+    }
 
     // Start the server
     app.listen(PORT, () => {

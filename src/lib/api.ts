@@ -77,6 +77,10 @@ export interface User {
   email: string;
   username?: string;
   name: string;
+  first_name?: string;
+  last_name?: string;
+  gender?: string;
+  user_type?: 'creator' | 'collector';
   avatar: string;
   wallet_balance: number;
   wallet_address?: string;
@@ -98,6 +102,9 @@ export interface User {
   artistStatus?: 'collector' | 'pending' | 'approved';
   onboardingCompleted?: boolean;
   createdAt?: string;
+  userType?: 'creator' | 'collector';
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface Art {
@@ -267,6 +274,30 @@ export const userAPI = {
     if (error) throw error;
     return addUserAliases(data);
   },
+  update: async (id: string, data: Partial<User>) => {
+    const resData = await fetchAPI(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return addUserAliases(resData);
+  },
+
+  updateAvatar: async (id: string, imageBase64: string) => {
+    const resData = await fetchAPI(`/users/${id}/avatar`, {
+      method: 'POST',
+      body: JSON.stringify({ imageBase64 }),
+    });
+    return addUserAliases(resData);
+  },
+  
+  updatePassword: async (id: string, currentPassword: string, newPassword: string) => {
+    const resData = await fetchAPI(`/users/${id}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    return resData;
+  },
+
   updateArtistStatus: async (userId: string, data: any) => {
     // Handle both string status and object
     const statusData = typeof data === 'string' ? { artist_status: data } : {

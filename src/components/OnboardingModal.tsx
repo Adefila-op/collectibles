@@ -36,7 +36,7 @@ export default function OnboardingModal({ userId, token, onComplete }: Onboardin
 
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/users/${userId}/onboard`, {
+      const res = await fetch(`${API_BASE}/users/${userId}/onboard`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

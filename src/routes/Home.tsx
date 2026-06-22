@@ -10,7 +10,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
 import logo from "@/assets/collectible-logo.svg";
 
