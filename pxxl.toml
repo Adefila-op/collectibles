@@ -1,0 +1,23 @@
+# Pxxl Deployment Configuration for Collectibles Platform
+# Full-stack app: React frontend (Vite) + Express backend
+
+[build]
+language = "javascript"
+framework = "express"
+packageManager = "npm"
+nodeVersion = "24"
+installCommand = "npm install"
+buildCommand = "npm run build"
+startCommand = "npm start"
+port = 3000
+outputDirectory = "dist"
+
+# Environment variables (non-sensitive - add secrets via Pxxl dashboard)
+[env]
+NODE_ENV = "production"
+VITE_API_URL = "/api"
+
+# Packages needed at runtime
+[packages]
+runtime = ["ca-certificates"]
+
