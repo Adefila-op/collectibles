@@ -2882,8 +2882,12 @@ app.get('/', (req, res) => {
   res.sendFile('index.html', { root: path.join(__dirname, '../dist') });
 });
 
-// Fallback for all other routes - serve index.html for client-side routing
+// Fallback for all other routes - serve index.html for client-side routing (but not API routes)
 app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    // API routes should return 404 JSON, not HTML
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
   res.sendFile('index.html', { root: path.join(__dirname, '../dist') });
 });
 
