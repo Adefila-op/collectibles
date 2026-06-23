@@ -3,8 +3,9 @@ import * as dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });
 
-// Use DATABASE_URL for Supabase connection, fall back to individual env vars for local dev
-const databaseUrl = 'postgresql://postgres.tezhvgyffjvfwricgohv:ollectibles0%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres';
+// Use DATABASE_URL environment variable (set in Pxxl dashboard or .env.local)
+// Falls back to Supabase for backward compatibility
+const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres.tezhvgyffjvfwricgohv:ollectibles0%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres';
 let pool: Pool | null = null;
 let useMockDb = false;
 
@@ -12,14 +13,9 @@ let useMockDb = false;
 try {
   pool = new Pool({
     connectionString: databaseUrl || undefined,
-    host: databaseUrl ? undefined : 'aws-0-eu-west-1.pooler.supabase.com',
-    port: databaseUrl ? undefined : 6543,
-    database: databaseUrl ? undefined : 'postgres',
-    user: databaseUrl ? undefined : 'postgres.tezhvgyffjvfwricgohv',
-    password: databaseUrl ? undefined : 'ollectibles0@',
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    ssl: databaseUrl ? { rejectUnauthorized: false } : false,
+    ssl: { rejectUnauthorized: false }, // Required for remote databases
   });
 
   pool.on('error', (err) => {
