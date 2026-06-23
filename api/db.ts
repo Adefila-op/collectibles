@@ -32,7 +32,28 @@ try {
 
 // Mock in-memory database for development
 const mockData: Record<string, any[]> = {
-  users: [],
+  users: [
+    {
+      id: 'mock-test-user',
+      email: 'test@example.com',
+      password: 'hashed_test_password_123', // In real app, use bcrypt
+      name: 'Test User',
+      first_name: 'Test',
+      last_name: 'User',
+      username: 'testuser',
+      avatar: null,
+      gender: null,
+      user_type: 'collector',
+      wallet_balance: 0,
+      wallet_address: null,
+      artist_status: 'collector',
+      privy_id: null,
+      is_admin: false,
+      onboarding_completed: false,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }
+  ],
   artworks: [],
   holdings: [],
   transactions: [],
@@ -90,6 +111,11 @@ function handleMockQuery(text: string, params?: any[]) {
   // Handle SELECT artwork by ID
   else if (text.includes('FROM artworks') && text.includes('WHERE') && params?.[0]) {
     result.rows = mockData.artworks.filter((art) => art.id === params[0]);
+    result.rowCount = result.rows.length;
+  }
+  // Handle SELECT from users by email (login query)
+  else if (text.includes('FROM users') && text.includes('WHERE email = $1')) {
+    result.rows = mockData.users.filter((u) => u.email === params?.[0]);
     result.rowCount = result.rows.length;
   }
   // Handle SELECT from users with is_admin check
