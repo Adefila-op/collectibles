@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from './db';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = 'super_secret_for_local_dev';
 const JWT_EXPIRY = '7d';
 
 /**

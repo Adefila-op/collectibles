@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 // RPC endpoints for different networks
 // Base testnet for development - switch to mainnet in production
 const RPC_ENDPOINTS = {
-  base: process.env.BASE_RPC_URL || 'https://sepolia.base.org',
+  base: 'https://sepolia.base.org',
   ethereum: 'https://eth.rpc.blxrbdn.com',
   polygon: 'https://polygon-rpc.com',
 };
@@ -196,7 +196,7 @@ export async function mintCertificateNFT(
   artistAddress: string,
   buyerAddress: string,
   certificateMetadataUri: string,
-  contractAddress: string = process.env.CERTIFICATE_CONTRACT_ADDRESS || ''
+  contractAddress: string = ''
 ): Promise<{
   transactionHash: string;
   tokenId?: string;
@@ -247,7 +247,7 @@ export async function transferCertificateNFT(
   from: string,
   to: string,
   tokenId: string,
-  contractAddress: string = process.env.CERTIFICATE_CONTRACT_ADDRESS || ''
+  contractAddress: string = ''
 ): Promise<{
   transactionHash: string;
   message: string;

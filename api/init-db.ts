@@ -7,12 +7,11 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 // Use DATABASE_URL from Supabase or environment variables for local dev
-const connectionString = process.env.DATABASE_URL || 
-  `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || 'postgres'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5432'}/postgres`;
+const connectionString = 'postgresql://postgres.tezhvgyffjvfwricgohv:ollectibles0%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres';
 
 const pool = new Pool({
   connectionString,
-  ssl: process.env.NODE_ENV === 'production' || process.env.DATABASE_URL?.includes('supabase') 
+  ssl: true 
     ? { rejectUnauthorized: false } 
     : false,
 });

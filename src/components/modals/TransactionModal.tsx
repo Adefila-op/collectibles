@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+const API_BASE = '/api';
 
 interface TransactionModalProps {
   open: boolean;

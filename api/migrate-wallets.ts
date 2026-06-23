@@ -5,11 +5,11 @@ import { generateDeterministicWallet } from './wallet.ts';
 dotenv.config({ path: '.env.local' });
 
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'collectibles_db',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
+  host: 'aws-0-eu-west-1.pooler.supabase.com',
+  port: 6543,
+  database: 'postgres',
+  user: 'postgres.tezhvgyffjvfwricgohv',
+  password: 'ollectibles0@',
 });
 
 async function migrateWallets() {

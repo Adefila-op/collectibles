@@ -85,7 +85,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app: Express = express();
-const PORT = process.env.API_PORT || 3000;
+const PORT = 3000;
 
 // ========== Security Configuration ==========
 
@@ -1192,7 +1192,7 @@ app.patch('/api/artwork-submissions/:submissionId/approve', requireAdmin, async 
       submission.artist_id,
       ownerId,
       metadataUri,
-      process.env.CERTIFICATE_CONTRACT_ADDRESS
+      undefined
     );
 
     // Update submission with NFT details
@@ -1575,7 +1575,7 @@ app.patch('/api/offers/:offerId/accept', requireAuth, async (req: Request, res: 
         sellerId,
         offer.buyer_id,
         certificate.nft_token_id || certificate.id,
-        process.env.CERTIFICATE_CONTRACT_ADDRESS
+        undefined
       );
       console.log('Certificate NFT transferred:', nftTransfer);
     }
@@ -2926,7 +2926,7 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`🚀 API server running on http://localhost:${PORT}`);
       console.log(`📊 Database: Supabase PostgreSQL`);
-      console.log(`⛓️  Blockchain: Base (${process.env.BASE_RPC_URL || 'Base Sepolia Testnet'})`);
+      console.log(`⛓️  Blockchain: Base (Base Sepolia Testnet)`);
     });
   } catch (error) {
     console.error('❌ FATAL: Supabase connection failed. Database persistence is required.');
@@ -2935,7 +2935,7 @@ async function startServer() {
   }
 }
 
-if (!process.env.VERCEL) {
+if (true) {
   startServer().catch(console.error);
 }
 

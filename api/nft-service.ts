@@ -14,7 +14,7 @@ import { query } from './db';
 
 // RPC endpoints
 const RPC_ENDPOINTS = {
-  base: process.env.BASE_RPC_URL || 'https://sepolia.base.org',
+  base: 'https://sepolia.base.org',
   ethereum: 'https://eth.rpc.blxrbdn.com',
   polygon: 'https://polygon-rpc.com',
 };

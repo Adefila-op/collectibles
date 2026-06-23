@@ -3,7 +3,7 @@
  * Replaces localStorage-based transaction storage in db.ts
  */
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = '/api';
 
 export interface OfferPayload {
   buyerId: string;

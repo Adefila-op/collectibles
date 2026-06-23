@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://tezhvgyffjvfwricgohv.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlemh2Z3lmZmp2ZndyaWNnb2h2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NDExNDMsImV4cCI6MjA5NzQxNzE0M30.dF6d2iNBM24vJi72wPcGj32Yfi8JMfD4gbnnDPcsffQ';
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const SUPABASE_URL = 'https://tezhvgyffjvfwricgohv.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlemh2Z3lmZmp2ZndyaWNnb2h2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NDExNDMsImV4cCI6MjA5NzQxNzE0M30.dF6d2iNBM24vJi72wPcGj32Yfi8JMfD4gbnnDPcsffQ';
+const API_BASE = '/api';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn('Supabase environment variables not set. Using REST API.');

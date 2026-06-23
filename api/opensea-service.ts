@@ -28,7 +28,7 @@ const curatedCollections = [
 ];
 
 function getOpenSeaHeaders() {
-  const apiKey = process.env.OPENSEA_API_KEY;
+  const apiKey = undefined;
   if (!apiKey) {
     throw new Error('OPENSEA_API_KEY is not configured');
   }

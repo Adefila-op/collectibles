@@ -7,7 +7,7 @@ interface OnboardingModalProps {
   onComplete: (user: any) => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+const API_BASE = '/api';
 
 export default function OnboardingModal({ userId, token, onComplete }: OnboardingModalProps) {
   const [name, setName] = useState("");
